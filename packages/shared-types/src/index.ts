@@ -1,6 +1,11 @@
 export const APP_NAME = "Lunch-Table";
 
 export {
+  CARD_LIBRARY_KINDS,
+  CARD_LIBRARY_RARITIES,
+  DECK_STATUSES,
+} from "./library";
+export {
   BSC_CHAIN_ID,
   buildWalletChallengeMessage,
 } from "./auth";
@@ -33,6 +38,19 @@ export type {
   WalletChallengeMessageInput,
   WalletChallengePurpose,
 } from "./auth";
+export type {
+  CardCatalogEntry,
+  CardLibraryKind,
+  CardLibraryRarity,
+  CollectionCardEntry,
+  CollectionSummary,
+  DeckCardEntry,
+  DeckId,
+  DeckRecord,
+  DeckStatus,
+  DeckValidationIssue,
+  DeckValidationResult,
+} from "./library";
 export type {
   GameplayIntent,
   GameplayIntentBase,

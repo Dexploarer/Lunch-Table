@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lunchtable/card-content": "workspace:*",
     "@lunchtable/game-core": "workspace:*",
     "@lunchtable/shared-types": "workspace:*",
     "react": "^19.2.0",

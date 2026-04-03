@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { action, internalMutation, mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { issueWalletAuthToken } from "./lib/jwt";
+import { ensureStarterCollectionEntries } from "./lib/library";
 import {
   AUTH_CHAIN_ID,
   createWalletChallengeRecord,
@@ -281,6 +282,7 @@ export const completeWalletSignupTransaction = internalMutation({
       primaryWalletId: walletId,
       updatedAt: now,
     });
+    await ensureStarterCollectionEntries(ctx.db, userId, now);
     await ctx.db.patch(args.challengeId, { consumedAt: now });
     await recordAudit(ctx, {
       purpose: "signup",
@@ -369,6 +371,7 @@ export const completeWalletLoginTransaction = internalMutation({
     }
 
     const now = Date.now();
+    await ensureStarterCollectionEntries(ctx.db, user._id, now);
     await ctx.db.patch(wallet._id, { lastAuthenticatedAt: now });
     await ctx.db.patch(args.challengeId, { consumedAt: now });
     await recordAudit(ctx, {

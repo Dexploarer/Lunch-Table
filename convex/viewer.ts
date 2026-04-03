@@ -1,14 +1,5 @@
 import { query } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
-import { parseUserSubject } from "./lib/walletAuth";
-
-async function getViewerUser(ctx: QueryCtx, subject: string) {
-  const userId = ctx.db.normalizeId("users", parseUserSubject(subject));
-  if (!userId) {
-    return null;
-  }
-  return ctx.db.get(userId);
-}
+import { requireViewerUser } from "./lib/viewer";
 
 export const get = query({
   args: {},
@@ -17,11 +8,7 @@ export const get = query({
     if (!identity) {
       return null;
     }
-
-    const user = await getViewerUser(ctx, identity.subject);
-    if (!user) {
-      return null;
-    }
+    const user = await requireViewerUser(ctx);
 
     const wallet = user.primaryWalletId
       ? await ctx.db.get(user.primaryWalletId)

@@ -24,6 +24,7 @@
     "apps/bot-runner": {
       "name": "@lunchtable/bot-runner",
       "dependencies": {
+        "@lunchtable/bot-sdk": "workspace:*",
         "@lunchtable/game-core": "workspace:*",
         "@lunchtable/shared-types": "workspace:*",
       },
@@ -31,14 +32,25 @@
     "apps/web": {
       "name": "@lunchtable/web",
       "dependencies": {
+        "@lunchtable/card-content": "workspace:*",
         "@lunchtable/game-core": "workspace:*",
         "@lunchtable/shared-types": "workspace:*",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
       },
     },
+    "packages/bot-sdk": {
+      "name": "@lunchtable/bot-sdk",
+      "dependencies": {
+        "@lunchtable/shared-types": "workspace:*",
+      },
+    },
     "packages/card-content": {
       "name": "@lunchtable/card-content",
+      "dependencies": {
+        "@lunchtable/game-core": "workspace:*",
+        "@lunchtable/shared-types": "workspace:*",
+      },
     },
     "packages/game-core": {
       "name": "@lunchtable/game-core",
@@ -175,6 +187,8 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@lunchtable/bot-runner": ["@lunchtable/bot-runner@workspace:apps/bot-runner"],
+
+    "@lunchtable/bot-sdk": ["@lunchtable/bot-sdk@workspace:packages/bot-sdk"],
 
     "@lunchtable/card-content": ["@lunchtable/card-content@workspace:packages/card-content"],
 

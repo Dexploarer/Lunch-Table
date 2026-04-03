@@ -1,5 +1,12 @@
+import { starterFormat } from "@lunchtable/card-content";
 import { createMatchSkeleton } from "@lunchtable/game-core";
-import type { ViewerIdentity } from "@lunchtable/shared-types";
+import type {
+  CardCatalogEntry,
+  CollectionSummary,
+  DeckId,
+  DeckRecord,
+  ViewerIdentity,
+} from "@lunchtable/shared-types";
 import { APP_NAME } from "@lunchtable/shared-types";
 import { useEffect, useState } from "react";
 
@@ -16,10 +23,12 @@ import { convexWalletAuthTransport, syncConvexAuth } from "./convex/client";
 
 const bootstrapChecklist = [
   "Bun workspace configured",
-  "React web shell online",
-  "Convex wallet auth scaffolded",
-  "Rules package under test",
+  "Convex wallet auth live",
+  "Starter collection seeded canonically",
+  "Deck validation and CRUD online",
 ];
+
+const defaultFormatId = starterFormat.formatId;
 
 type NoticeTone = "error" | "neutral" | "success" | "warning";
 
@@ -34,6 +43,52 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Unexpected error";
+}
+
+function buildStarterDeckEntries(catalog: CardCatalogEntry[]) {
+  return catalog.map((card) => ({
+    cardId: card.cardId,
+    count: starterFormat.deckRules.maxCopies,
+  }));
+}
+
+async function loadLibrarySnapshot() {
+  if (!convexWalletAuthTransport) {
+    throw new Error("Convex transport unavailable");
+  }
+
+  const [catalog, collection, decks] = await Promise.all([
+    convexWalletAuthTransport.listCatalog({
+      formatId: defaultFormatId,
+    }),
+    convexWalletAuthTransport.getCollectionSummary({
+      formatId: defaultFormatId,
+    }),
+    convexWalletAuthTransport.listDecks({
+      formatId: defaultFormatId,
+    }),
+  ]);
+
+  return {
+    catalog,
+    collection,
+    decks,
+  };
+}
+
+function summarizeValidation(deck: DeckRecord) {
+  const errorCount = deck.validation.issues.filter(
+    (issue) => issue.severity === "error",
+  ).length;
+  const warningCount = deck.validation.issues.length - errorCount;
+
+  if (errorCount === 0 && warningCount === 0) {
+    return "Legal";
+  }
+
+  return `${errorCount} error${errorCount === 1 ? "" : "s"}, ${warningCount} warning${
+    warningCount === 1 ? "" : "s"
+  }`;
 }
 
 function StatusBanner({ notice }: { notice: Notice | null }) {
@@ -151,6 +206,174 @@ function PrivateKeyReveal({
   );
 }
 
+function CollectionPanel({
+  collection,
+  loading,
+}: {
+  collection: CollectionSummary | null;
+  loading: boolean;
+}) {
+  return (
+    <section className="workspace-card">
+      <div className="panel-stack">
+        <div>
+          <p className="eyebrow">Collection</p>
+          <h3>{starterFormat.name}</h3>
+        </div>
+        {loading ? (
+          <p className="support-copy">
+            Syncing starter collection from Convex.
+          </p>
+        ) : !collection ? (
+          <p className="support-copy">
+            Sign in to fetch the seeded starter collection for this seat.
+          </p>
+        ) : (
+          <>
+            <dl className="stats">
+              <div>
+                <dt>Unique cards</dt>
+                <dd>{collection.totalUniqueCards}</dd>
+              </div>
+              <div>
+                <dt>Total copies</dt>
+                <dd>{collection.totalOwnedCards}</dd>
+              </div>
+            </dl>
+            <div className="library-list">
+              {collection.entries.map((entry) => (
+                <article className="library-card" key={entry.card.cardId}>
+                  <div>
+                    <p className="library-card-title">{entry.card.name}</p>
+                    <p className="library-card-meta">
+                      {entry.card.kind} · {entry.card.rarity} ·{" "}
+                      {entry.card.cost} cost
+                    </p>
+                  </div>
+                  <strong>{entry.ownedCount} owned</strong>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DeckPanel({
+  canCreateStarterDeck,
+  decks,
+  loading,
+  onArchiveDeck,
+  onCloneDeck,
+  onCreateStarterDeck,
+  pendingAction,
+}: {
+  canCreateStarterDeck: boolean;
+  decks: DeckRecord[];
+  loading: boolean;
+  onArchiveDeck: (deckId: DeckId, deckName: string) => void;
+  onCloneDeck: (deckId: DeckId, deckName: string) => void;
+  onCreateStarterDeck: () => void;
+  pendingAction: string | null;
+}) {
+  return (
+    <section className="workspace-card workspace-card-dark">
+      <div className="panel-stack">
+        <div className="panel-header-row">
+          <div>
+            <p className="eyebrow">Decks</p>
+            <h3>Saved lists</h3>
+          </div>
+          <button
+            className="action action-contrast"
+            disabled={!canCreateStarterDeck || pendingAction !== null}
+            onClick={onCreateStarterDeck}
+            type="button"
+          >
+            {pendingAction === "create"
+              ? "Creating starter deck..."
+              : "Create starter deck"}
+          </button>
+        </div>
+        {loading ? (
+          <p className="support-copy">Loading deck records from Convex.</p>
+        ) : decks.length === 0 ? (
+          <p className="support-copy">
+            No saved decks yet. Create the default 40-card starter list to prove
+            the validation path end to end.
+          </p>
+        ) : (
+          <div className="deck-list">
+            {decks.map((deck) => (
+              <article className="deck-card" key={deck.id}>
+                <div className="deck-card-header">
+                  <div>
+                    <p className="library-card-title">{deck.name}</p>
+                    <p className="library-card-meta">
+                      {deck.validation.mainboardCount} mainboard ·{" "}
+                      {deck.validation.sideboardCount} sideboard
+                    </p>
+                  </div>
+                  <span
+                    className={`deck-status ${
+                      deck.validation.isLegal
+                        ? "deck-status-legal"
+                        : "deck-status-illegal"
+                    }`}
+                  >
+                    {summarizeValidation(deck)}
+                  </span>
+                </div>
+                {deck.validation.issues.length > 0 ? (
+                  <ul className="issue-list">
+                    {deck.validation.issues.map((issue, index) => (
+                      <li key={`${deck.id}-${issue.code}-${index}`}>
+                        {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="support-copy">
+                    Fully legal against the user’s seeded starter collection.
+                  </p>
+                )}
+                <div className="inline-actions">
+                  <button
+                    className="action secondary-action"
+                    disabled={pendingAction !== null}
+                    onClick={() => onCloneDeck(deck.id, deck.name)}
+                    type="button"
+                  >
+                    {pendingAction === `clone:${deck.id}`
+                      ? "Cloning..."
+                      : "Clone"}
+                  </button>
+                  <button
+                    className="action secondary-action"
+                    disabled={
+                      pendingAction !== null || deck.status === "archived"
+                    }
+                    onClick={() => onArchiveDeck(deck.id, deck.name)}
+                    type="button"
+                  >
+                    {pendingAction === `archive:${deck.id}`
+                      ? "Archiving..."
+                      : deck.status === "archived"
+                        ? "Archived"
+                        : "Archive"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const match = createMatchSkeleton();
   const [signupEmail, setSignupEmail] = useState("");
@@ -180,6 +403,11 @@ export function App() {
     null,
   );
   const [copiedPrivateKey, setCopiedPrivateKey] = useState(false);
+  const [catalog, setCatalog] = useState<CardCatalogEntry[]>([]);
+  const [collection, setCollection] = useState<CollectionSummary | null>(null);
+  const [decks, setDecks] = useState<DeckRecord[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [deckAction, setDeckAction] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -237,6 +465,49 @@ export function App() {
       setViewerLoading(false);
     }
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncLibrary() {
+      if (!convexWalletAuthTransport || !viewer) {
+        setCatalog([]);
+        setCollection(null);
+        setDecks([]);
+        return;
+      }
+
+      setLibraryLoading(true);
+      try {
+        const nextLibrary = await loadLibrarySnapshot();
+        if (cancelled) {
+          return;
+        }
+
+        setCatalog(nextLibrary.catalog);
+        setCollection(nextLibrary.collection);
+        setDecks(nextLibrary.decks);
+      } catch (error) {
+        if (!cancelled) {
+          setNotice({
+            body: getErrorMessage(error),
+            title: "Library sync failed",
+            tone: "error",
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setLibraryLoading(false);
+        }
+      }
+    }
+
+    void syncLibrary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewer]);
 
   async function handleSignupSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -339,6 +610,9 @@ export function App() {
     clearAuthToken();
     syncConvexAuth();
     setViewer(null);
+    setCatalog([]);
+    setCollection(null);
+    setDecks([]);
     setNotice({
       body: "The local JWT was cleared. Use your saved private key to restore access again.",
       title: "Signed out",
@@ -369,11 +643,113 @@ export function App() {
     });
   }
 
+  async function handleCreateStarterDeck() {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+    if (catalog.length === 0) {
+      setNotice({
+        body: "The starter catalog has not loaded yet.",
+        title: "Catalog unavailable",
+        tone: "warning",
+      });
+      return;
+    }
+
+    setDeckAction("create");
+    try {
+      const deck = await convexWalletAuthTransport.createDeck({
+        formatId: defaultFormatId,
+        mainboard: buildStarterDeckEntries(catalog),
+        name: `${starterFormat.name} Starter ${decks.length + 1}`,
+        sideboard: [],
+      });
+      const nextLibrary = await loadLibrarySnapshot();
+      setCatalog(nextLibrary.catalog);
+      setCollection(nextLibrary.collection);
+      setDecks(nextLibrary.decks);
+      setNotice({
+        body: `${deck.name} saved with ${deck.validation.mainboardCount} cards and is ready for match hookup.`,
+        title: "Starter deck created",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Deck creation failed",
+        tone: "error",
+      });
+    } finally {
+      setDeckAction(null);
+    }
+  }
+
+  async function handleCloneDeck(deckId: DeckId, deckName: string) {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+
+    setDeckAction(`clone:${deckId}`);
+    try {
+      const deck = await convexWalletAuthTransport.cloneDeck({
+        deckId,
+        name: `${deckName} Copy`,
+      });
+      const nextLibrary = await loadLibrarySnapshot();
+      setCatalog(nextLibrary.catalog);
+      setCollection(nextLibrary.collection);
+      setDecks(nextLibrary.decks);
+      setNotice({
+        body: `${deck.name} was cloned from the existing legal list.`,
+        title: "Deck cloned",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Deck clone failed",
+        tone: "error",
+      });
+    } finally {
+      setDeckAction(null);
+    }
+  }
+
+  async function handleArchiveDeck(deckId: DeckId, deckName: string) {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+
+    setDeckAction(`archive:${deckId}`);
+    try {
+      await convexWalletAuthTransport.archiveDeck({
+        deckId,
+      });
+      const nextLibrary = await loadLibrarySnapshot();
+      setCatalog(nextLibrary.catalog);
+      setCollection(nextLibrary.collection);
+      setDecks(nextLibrary.decks);
+      setNotice({
+        body: `${deckName} moved to archived status.`,
+        title: "Deck archived",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Deck archive failed",
+        tone: "error",
+      });
+    } finally {
+      setDeckAction(null);
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">Phase 2 Wallet Auth</p>
+          <p className="eyebrow">Phase 6 Library + Decks</p>
           <h1>{APP_NAME}</h1>
           <p className="lede">
             Email and username create the player record. A fresh BSC wallet is
@@ -381,8 +757,9 @@ export function App() {
             the private key never leaves the player’s machine.
           </p>
           <p className="support-copy">
-            Human users and AI agents will share the same canonical user,
-            wallet, and match surfaces. This step locks the human path first.
+            This phase adds canonical collection entries, validated deck
+            records, and starter catalog queries on the same Convex identity
+            that human users and AI agents will share.
           </p>
         </div>
         <div className="hero-metrics">
@@ -393,12 +770,12 @@ export function App() {
             </strong>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Auth model</span>
-            <strong>Challenge + signature</strong>
+            <span className="metric-label">Format</span>
+            <strong>{starterFormat.name}</strong>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Private key</span>
-            <strong>Browser only</strong>
+            <span className="metric-label">Wallet model</span>
+            <strong>Self-custodied</strong>
           </div>
         </div>
       </section>
@@ -451,7 +828,8 @@ export function App() {
             </label>
             <p className="microcopy">
               Submitting this form generates a new BSC keypair in the browser
-              and creates the canonical user + wallet records through Convex.
+              and creates the canonical user, wallet, and starter collection
+              records through Convex.
             </p>
             <button
               className="action"
@@ -513,6 +891,32 @@ export function App() {
               setCopiedPrivateKey(false);
             }}
             wallet={revealedWallet}
+          />
+        </div>
+      </section>
+
+      <section className="panel panel-secondary">
+        <div className="workspace-header">
+          <div>
+            <p className="eyebrow">Deck Workspace</p>
+            <h2>Collection and legal deck records</h2>
+          </div>
+          <p className="support-copy">
+            The starter catalog is static, but collection ownership and deck
+            legality are resolved through canonical Convex tables for the
+            signed-in user.
+          </p>
+        </div>
+        <div className="library-grid">
+          <CollectionPanel collection={collection} loading={libraryLoading} />
+          <DeckPanel
+            canCreateStarterDeck={Boolean(viewer && catalog.length > 0)}
+            decks={decks}
+            loading={libraryLoading}
+            onArchiveDeck={handleArchiveDeck}
+            onCloneDeck={handleCloneDeck}
+            onCreateStarterDeck={handleCreateStarterDeck}
+            pendingAction={deckAction}
           />
         </div>
       </section>

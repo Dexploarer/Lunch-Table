@@ -189,6 +189,7 @@ h3 {
 
 .auth-grid,
 .utility-grid,
+.library-grid,
 .panel-secondary {
   display: grid;
   gap: 1rem;
@@ -199,7 +200,8 @@ h3 {
 }
 
 .auth-panel,
-.utility-panel {
+.utility-panel,
+.workspace-card {
   padding: 1.25rem;
   border-radius: 22px;
   background: rgba(255, 251, 244, 0.88);
@@ -211,9 +213,17 @@ h3 {
   color: #fff4de;
 }
 
+.workspace-card-dark {
+  background: linear-gradient(180deg, #2b170b 0%, #4a2610 100%);
+  color: #fff4de;
+}
+
 .auth-panel-dark .field span,
 .auth-panel-dark .microcopy,
-.auth-panel-dark .panel-kicker {
+.auth-panel-dark .panel-kicker,
+.workspace-card-dark .eyebrow,
+.workspace-card-dark .support-copy,
+.workspace-card-dark .library-card-meta {
   color: rgba(255, 235, 208, 0.8);
 }
 
@@ -293,12 +303,98 @@ h3 {
   box-shadow: none;
 }
 
+.panel-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel-header-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
 .utility-panel-highlight {
   background: radial-gradient(
       circle at top right,
       rgba(236, 182, 86, 0.26),
       transparent 34%
     ), rgba(255, 248, 233, 0.9);
+}
+
+.library-list,
+.deck-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.library-card,
+.deck-card {
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(91, 58, 18, 0.12);
+}
+
+.library-card {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(144, 96, 27, 0.08);
+}
+
+.workspace-card-dark .deck-card {
+  background: rgba(255, 246, 228, 0.08);
+  border-color: rgba(255, 222, 178, 0.12);
+}
+
+.library-card-title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.library-card-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(77, 52, 23, 0.68);
+}
+
+.deck-card-header {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.85rem;
+}
+
+.deck-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.deck-status-legal {
+  background: rgba(43, 148, 83, 0.16);
+  color: #1a6f3c;
+}
+
+.deck-status-illegal {
+  background: rgba(196, 76, 47, 0.16);
+  color: #a53e22;
+}
+
+.workspace-card-dark .deck-status-legal {
+  color: #b1f0c8;
+}
+
+.workspace-card-dark .deck-status-illegal {
+  color: #ffc4b0;
 }
 
 .identity-list,
@@ -343,6 +439,13 @@ h3 {
   flex-wrap: wrap;
 }
 
+.issue-list {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
 .key-box {
   margin: 1rem 0;
   padding: 1rem;
@@ -373,7 +476,8 @@ h3 {
 
   .workspace-header,
   .panel-secondary,
-  .utility-grid {
+  .utility-grid,
+  .library-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

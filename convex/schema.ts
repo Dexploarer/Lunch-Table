@@ -24,6 +24,40 @@ export default defineSchema({
     .index("by_email", ["emailNormalized"])
     .index("by_username", ["usernameNormalized"]),
 
+  collectionEntries: defineTable({
+    cardId: v.string(),
+    formatId: v.string(),
+    ownedCount: v.number(),
+    source: v.union(v.literal("starterGrant")),
+    updatedAt: v.number(),
+    userId: v.id("users"),
+  })
+    .index("by_user_card", ["userId", "cardId"])
+    .index("by_user_format", ["userId", "formatId"]),
+
+  decks: defineTable({
+    createdAt: v.number(),
+    formatId: v.string(),
+    mainboard: v.array(
+      v.object({
+        cardId: v.string(),
+        count: v.number(),
+      }),
+    ),
+    name: v.string(),
+    sideboard: v.array(
+      v.object({
+        cardId: v.string(),
+        count: v.number(),
+      }),
+    ),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    updatedAt: v.number(),
+    userId: v.id("users"),
+  })
+    .index("by_user_status_updated", ["userId", "status", "updatedAt"])
+    .index("by_user_updated", ["userId", "updatedAt"]),
+
   walletChallenges: defineTable({
     address: v.string(),
     addressNormalized: v.string(),
