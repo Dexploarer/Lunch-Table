@@ -1,0 +1,65 @@
+import { starterFormat } from "@lunchtable/card-content";
+import type { UserId } from "@lunchtable/shared-types";
+import { describe, expect, it } from "vitest";
+
+import { buildPracticeMatchBundle } from "../convex/lib/matches";
+
+const starterDeck = {
+  mainboard: starterFormat.cardPool.map((card) => ({
+    cardId: card.id,
+    count: starterFormat.deckRules.maxCopies,
+  })),
+  sideboard: [],
+};
+
+describe("match persistence helpers", () => {
+  it("builds an initial practice match shell with cached views", () => {
+    const bundle = buildPracticeMatchBundle({
+      createdAt: 123,
+      format: starterFormat,
+      matchId: "match_123",
+      player: {
+        userId: "user_123" as UserId,
+        username: "tablemage",
+        walletAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      },
+      primaryDeck: starterDeck,
+    });
+
+    expect(bundle.shell.id).toBe("match_123");
+    expect(bundle.shell.lastEventNumber).toBe(1);
+    expect(bundle.events).toHaveLength(1);
+    expect(bundle.events[0]?.kind).toBe("matchCreated");
+    expect(bundle.views).toHaveLength(2);
+    expect(bundle.spectatorView.kind).toBe("spectator");
+  });
+
+  it("keeps deck order private in spectator projections", () => {
+    const bundle = buildPracticeMatchBundle({
+      createdAt: 123,
+      format: starterFormat,
+      matchId: "match_123",
+      player: {
+        userId: "user_123" as UserId,
+        username: "tablemage",
+        walletAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      },
+      primaryDeck: starterDeck,
+    });
+
+    const seatView = bundle.views.find(
+      (view) => view.viewerSeat === "seat-0",
+    )?.view;
+    const seatDeck = seatView?.zones.find(
+      (zone) => zone.ownerSeat === "seat-0" && zone.zone === "deck",
+    );
+    const spectatorDeck = bundle.spectatorView.zones.find(
+      (zone) => zone.ownerSeat === "seat-0" && zone.zone === "deck",
+    );
+
+    expect(seatView?.viewerSeat).toBe("seat-0");
+    expect(seatDeck?.cards).toHaveLength(48);
+    expect(spectatorDeck?.cards).toHaveLength(0);
+    expect(spectatorDeck?.cardCount).toBe(48);
+  });
+});

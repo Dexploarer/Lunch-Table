@@ -1,5 +1,5 @@
 import type { UserId } from "./auth";
-import type { GameplayIntentKind } from "./gameplay";
+import type { GameplayIntentKind, MatchEventKind } from "./gameplay";
 
 export type MatchId = string;
 export type SeatId = string;
@@ -267,7 +267,7 @@ export interface MatchStackItemView {
 }
 
 export interface MatchEventSummary {
-  kind: string;
+  kind: MatchEventKind;
   label: string;
   seat: SeatId | null;
   sequence: number;

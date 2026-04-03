@@ -5,6 +5,9 @@ import type {
   CollectionSummary,
   DeckId,
   DeckRecord,
+  MatchSeatView,
+  MatchShell,
+  MatchSpectatorView,
   ViewerIdentity,
 } from "@lunchtable/shared-types";
 import { APP_NAME } from "@lunchtable/shared-types";
@@ -26,6 +29,7 @@ const bootstrapChecklist = [
   "Convex wallet auth live",
   "Starter collection seeded canonically",
   "Deck validation and CRUD online",
+  "Match shell persistence online",
 ];
 
 const defaultFormatId = starterFormat.formatId;
@@ -73,6 +77,36 @@ async function loadLibrarySnapshot() {
     catalog,
     collection,
     decks,
+  };
+}
+
+async function loadMatchSnapshot() {
+  if (!convexWalletAuthTransport) {
+    throw new Error("Convex transport unavailable");
+  }
+
+  const matches = await convexWalletAuthTransport.listMyMatches({});
+  if (matches.length === 0) {
+    return {
+      matches,
+      seatView: null,
+      spectatorView: null,
+    };
+  }
+
+  const [seatView, spectatorView] = await Promise.all([
+    convexWalletAuthTransport.getSeatView({
+      matchId: matches[0].id,
+    }),
+    convexWalletAuthTransport.getSpectatorView({
+      matchId: matches[0].id,
+    }),
+  ]);
+
+  return {
+    matches,
+    seatView,
+    spectatorView,
   };
 }
 
@@ -262,19 +296,23 @@ function CollectionPanel({
 }
 
 function DeckPanel({
+  canCreatePracticeMatch,
   canCreateStarterDeck,
   decks,
   loading,
   onArchiveDeck,
   onCloneDeck,
+  onCreatePracticeMatch,
   onCreateStarterDeck,
   pendingAction,
 }: {
+  canCreatePracticeMatch: boolean;
   canCreateStarterDeck: boolean;
   decks: DeckRecord[];
   loading: boolean;
   onArchiveDeck: (deckId: DeckId, deckName: string) => void;
   onCloneDeck: (deckId: DeckId, deckName: string) => void;
+  onCreatePracticeMatch: () => void;
   onCreateStarterDeck: () => void;
   pendingAction: string | null;
 }) {
@@ -297,6 +335,16 @@ function DeckPanel({
               : "Create starter deck"}
           </button>
         </div>
+        <button
+          className="action secondary-action"
+          disabled={!canCreatePracticeMatch || pendingAction !== null}
+          onClick={onCreatePracticeMatch}
+          type="button"
+        >
+          {pendingAction === "create-practice"
+            ? "Creating practice match..."
+            : "Create practice match"}
+        </button>
         {loading ? (
           <p className="support-copy">Loading deck records from Convex.</p>
         ) : decks.length === 0 ? (
@@ -374,6 +422,120 @@ function DeckPanel({
   );
 }
 
+function MatchShellPanel({
+  loading,
+  matches,
+}: {
+  loading: boolean;
+  matches: MatchShell[];
+}) {
+  return (
+    <section className="workspace-card">
+      <div className="panel-stack">
+        <div>
+          <p className="eyebrow">Matches</p>
+          <h3>Recent shells</h3>
+        </div>
+        {loading ? (
+          <p className="support-copy">Loading persisted match shells.</p>
+        ) : matches.length === 0 ? (
+          <p className="support-copy">
+            No persisted matches yet. Create a practice match from one of your
+            legal decks.
+          </p>
+        ) : (
+          <div className="deck-list">
+            {matches.map((match) => (
+              <article className="library-card" key={match.id}>
+                <div>
+                  <p className="library-card-title">{match.id}</p>
+                  <p className="library-card-meta">
+                    {match.status} · {match.phase} · turn {match.turnNumber}
+                  </p>
+                </div>
+                <strong>{match.seats.length} seats</strong>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MatchViewProofPanel({
+  loading,
+  seatView,
+  spectatorView,
+}: {
+  loading: boolean;
+  seatView: MatchSeatView | null;
+  spectatorView: MatchSpectatorView | null;
+}) {
+  const seatDeck = seatView?.zones.find(
+    (zone) => zone.ownerSeat === seatView.viewerSeat && zone.zone === "deck",
+  );
+  const spectatorDeck = spectatorView?.zones.find(
+    (zone) => zone.ownerSeat === seatView?.viewerSeat && zone.zone === "deck",
+  );
+
+  return (
+    <section className="workspace-card workspace-card-dark">
+      <div className="panel-stack">
+        <div>
+          <p className="eyebrow">Isolation Proof</p>
+          <h3>Seat vs spectator projections</h3>
+        </div>
+        {loading ? (
+          <p className="support-copy">Resolving seat and spectator views.</p>
+        ) : !seatView || !spectatorView ? (
+          <p className="support-copy">
+            Create a practice match to compare the private seat view against the
+            public spectator projection.
+          </p>
+        ) : (
+          <>
+            <dl className="stats">
+              <div>
+                <dt>Viewer seat</dt>
+                <dd>{seatView.viewerSeat}</dd>
+              </div>
+              <div>
+                <dt>Seat intents</dt>
+                <dd>{seatView.availableIntents.length}</dd>
+              </div>
+              <div>
+                <dt>Spectator intents</dt>
+                <dd>{spectatorView.availableIntents.length}</dd>
+              </div>
+            </dl>
+            <div className="projection-grid">
+              <article className="deck-card">
+                <p className="library-card-title">Seat query</p>
+                <p className="library-card-meta">
+                  Own deck cards visible: {seatDeck?.cards.length ?? 0} /{" "}
+                  {seatDeck?.cardCount ?? 0}
+                </p>
+                <p className="support-copy">
+                  Prompt: {seatView.prompt ? seatView.prompt.kind : "none"}
+                </p>
+              </article>
+              <article className="deck-card">
+                <p className="library-card-title">Spectator query</p>
+                <p className="library-card-meta">
+                  Same deck cards visible: {spectatorDeck?.cards.length ?? 0} /{" "}
+                  {spectatorDeck?.cardCount ?? 0}
+                </p>
+                <p className="support-copy">Prompt: none</p>
+              </article>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const match = createMatchSkeleton();
   const [signupEmail, setSignupEmail] = useState("");
@@ -406,7 +568,13 @@ export function App() {
   const [catalog, setCatalog] = useState<CardCatalogEntry[]>([]);
   const [collection, setCollection] = useState<CollectionSummary | null>(null);
   const [decks, setDecks] = useState<DeckRecord[]>([]);
+  const [matches, setMatches] = useState<MatchShell[]>([]);
+  const [seatView, setSeatView] = useState<MatchSeatView | null>(null);
+  const [spectatorView, setSpectatorView] = useState<MatchSpectatorView | null>(
+    null,
+  );
   const [libraryLoading, setLibraryLoading] = useState(false);
+  const [matchLoading, setMatchLoading] = useState(false);
   const [deckAction, setDeckAction] = useState<string | null>(null);
 
   useEffect(() => {
@@ -474,6 +642,9 @@ export function App() {
         setCatalog([]);
         setCollection(null);
         setDecks([]);
+        setMatches([]);
+        setSeatView(null);
+        setSpectatorView(null);
         return;
       }
 
@@ -503,6 +674,49 @@ export function App() {
     }
 
     void syncLibrary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewer]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncMatches() {
+      if (!convexWalletAuthTransport || !viewer) {
+        setMatches([]);
+        setSeatView(null);
+        setSpectatorView(null);
+        return;
+      }
+
+      setMatchLoading(true);
+      try {
+        const nextMatchSnapshot = await loadMatchSnapshot();
+        if (cancelled) {
+          return;
+        }
+
+        setMatches(nextMatchSnapshot.matches);
+        setSeatView(nextMatchSnapshot.seatView);
+        setSpectatorView(nextMatchSnapshot.spectatorView);
+      } catch (error) {
+        if (!cancelled) {
+          setNotice({
+            body: getErrorMessage(error),
+            title: "Match sync failed",
+            tone: "error",
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setMatchLoading(false);
+        }
+      }
+    }
+
+    void syncMatches();
 
     return () => {
       cancelled = true;
@@ -613,6 +827,9 @@ export function App() {
     setCatalog([]);
     setCollection(null);
     setDecks([]);
+    setMatches([]);
+    setSeatView(null);
+    setSpectatorView(null);
     setNotice({
       body: "The local JWT was cleared. Use your saved private key to restore access again.",
       title: "Signed out",
@@ -745,11 +962,53 @@ export function App() {
     }
   }
 
+  async function handleCreatePracticeMatch() {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+
+    const sourceDeck = decks.find(
+      (deck) => deck.status === "active" && deck.validation.isLegal,
+    );
+    if (!sourceDeck) {
+      setNotice({
+        body: "Create or restore at least one active legal deck before creating a match shell.",
+        title: "No legal deck available",
+        tone: "warning",
+      });
+      return;
+    }
+
+    setDeckAction("create-practice");
+    try {
+      const shell = await convexWalletAuthTransport.createPracticeMatch({
+        deckId: sourceDeck.id,
+      });
+      const nextMatches = await loadMatchSnapshot();
+      setMatches(nextMatches.matches);
+      setSeatView(nextMatches.seatView);
+      setSpectatorView(nextMatches.spectatorView);
+      setNotice({
+        body: `${shell.id} persisted with seat and spectator projections.`,
+        title: "Practice match created",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Practice match failed",
+        tone: "error",
+      });
+    } finally {
+      setDeckAction(null);
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">Phase 6 Library + Decks</p>
+          <p className="eyebrow">Phase 7 Match Persistence</p>
           <h1>{APP_NAME}</h1>
           <p className="lede">
             Email and username create the player record. A fresh BSC wallet is
@@ -757,9 +1016,9 @@ export function App() {
             the private key never leaves the player’s machine.
           </p>
           <p className="support-copy">
-            This phase adds canonical collection entries, validated deck
-            records, and starter catalog queries on the same Convex identity
-            that human users and AI agents will share.
+            This phase adds persisted match shells, cached seat projections, and
+            spectator-safe views on the same Convex identity that human users
+            and AI agents will share.
           </p>
         </div>
         <div className="hero-metrics">
@@ -910,13 +1169,38 @@ export function App() {
         <div className="library-grid">
           <CollectionPanel collection={collection} loading={libraryLoading} />
           <DeckPanel
+            canCreatePracticeMatch={decks.some(
+              (deck) => deck.status === "active" && deck.validation.isLegal,
+            )}
             canCreateStarterDeck={Boolean(viewer && catalog.length > 0)}
             decks={decks}
             loading={libraryLoading}
             onArchiveDeck={handleArchiveDeck}
             onCloneDeck={handleCloneDeck}
+            onCreatePracticeMatch={handleCreatePracticeMatch}
             onCreateStarterDeck={handleCreateStarterDeck}
             pendingAction={deckAction}
+          />
+        </div>
+      </section>
+
+      <section className="panel panel-secondary">
+        <div className="workspace-header">
+          <div>
+            <p className="eyebrow">Match Persistence</p>
+            <h2>Shells and isolated cached views</h2>
+          </div>
+          <p className="support-copy">
+            Practice matches now persist a shell row, snapshot row, append-only
+            event log entry, and separate cached seat and spectator views.
+          </p>
+        </div>
+        <div className="library-grid">
+          <MatchShellPanel loading={matchLoading} matches={matches} />
+          <MatchViewProofPanel
+            loading={matchLoading}
+            seatView={seatView}
+            spectatorView={spectatorView}
           />
         </div>
       </section>

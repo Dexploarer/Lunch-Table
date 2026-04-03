@@ -24,6 +24,7 @@ export type {
   KeywordRegistry,
   MatchEvent,
   MatchEventKind,
+  MatchEventSummary,
   MatchId,
   MatchPhase,
   MatchState,
@@ -49,11 +50,17 @@ export {
 } from "./engine";
 export { createGameState } from "./engine";
 export {
+  createRecentEventSummaries,
+  createSeatView,
+  createSpectatorView,
+} from "./views";
+export {
   compileCardDefinition,
   validateCardDefinition,
   validateFormatDefinition,
 } from "./dsl";
 export { deriveDeterministicNumber } from "./state";
+export { createMatchShellFromState } from "./state";
 
 export function createMatchSkeleton(): MatchSkeleton {
   return createGameState().shell;

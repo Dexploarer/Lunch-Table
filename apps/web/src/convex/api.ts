@@ -6,6 +6,10 @@ import type {
   DeckRecord,
   DeckStatus,
   DeckValidationResult,
+  MatchSeatView,
+  MatchShell,
+  MatchSpectatorView,
+  MatchStatus,
   ViewerIdentity,
   WalletAuthSession,
   WalletChallengeId,
@@ -49,9 +53,21 @@ export interface WalletLibraryTransport extends WalletAuthTransport {
     name: string;
     sideboard: DeckCardEntry[];
   }): Promise<DeckRecord>;
+  createPracticeMatch(args: {
+    deckId: DeckId;
+  }): Promise<MatchShell>;
   getCollectionSummary(args: {
     formatId: string;
   }): Promise<CollectionSummary>;
+  getMatchShell(args: {
+    matchId: string;
+  }): Promise<MatchShell | null>;
+  getSeatView(args: {
+    matchId: string;
+  }): Promise<MatchSeatView | null>;
+  getSpectatorView(args: {
+    matchId: string;
+  }): Promise<MatchSpectatorView | null>;
   listCatalog(args: {
     formatId: string;
   }): Promise<CardCatalogEntry[]>;
@@ -59,6 +75,9 @@ export interface WalletLibraryTransport extends WalletAuthTransport {
     formatId?: string;
     status?: DeckStatus;
   }): Promise<DeckRecord[]>;
+  listMyMatches(args: {
+    status?: MatchStatus;
+  }): Promise<MatchShell[]>;
   validateDeck(args: {
     formatId: string;
     mainboard: DeckCardEntry[];
@@ -91,11 +110,35 @@ export function createConvexWalletAuthTransport(
     createDeck(args) {
       return client.mutation(api.decks.create, args) as Promise<DeckRecord>;
     },
+    createPracticeMatch(args) {
+      return client.mutation(
+        api.matches.createPractice,
+        args,
+      ) as Promise<MatchShell>;
+    },
     getCollectionSummary(args) {
       return client.query(
         api.collections.getSummary,
         args,
       ) as Promise<CollectionSummary>;
+    },
+    getMatchShell(args) {
+      return client.query(
+        api.matches.getShell,
+        args,
+      ) as Promise<MatchShell | null>;
+    },
+    getSeatView(args) {
+      return client.query(
+        api.matches.getSeatView,
+        args,
+      ) as Promise<MatchSeatView | null>;
+    },
+    getSpectatorView(args) {
+      return client.query(
+        api.matches.getSpectatorView,
+        args,
+      ) as Promise<MatchSpectatorView | null>;
     },
     getViewer() {
       return client.query(api.viewer.get, {}) as Promise<ViewerIdentity | null>;
@@ -107,6 +150,11 @@ export function createConvexWalletAuthTransport(
     },
     listDecks(args) {
       return client.query(api.decks.list, args) as Promise<DeckRecord[]>;
+    },
+    listMyMatches(args) {
+      return client.query(api.matches.listMyMatches, args) as Promise<
+        MatchShell[]
+      >;
     },
     requestLoginChallenge(args) {
       return client.mutation(

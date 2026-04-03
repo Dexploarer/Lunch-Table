@@ -65,6 +65,7 @@ export type {
   MatchCardStatLine,
   MatchCardView,
   MatchDeckRulesSummary,
+  MatchEventSummary,
   MatchFormatSummary,
   MatchId,
   MatchPhase,

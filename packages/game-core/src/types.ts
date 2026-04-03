@@ -4,6 +4,7 @@ export type {
   GameplayIntentKind,
   MatchEvent,
   MatchEventKind,
+  MatchEventSummary,
   MatchId,
   MatchPhase,
   MatchSeatView,
