@@ -8,6 +8,7 @@ import type {
   DeckValidationResult,
   LobbyMutationResult,
   LobbyRecord,
+  MatchEventKind,
   MatchSeatView,
   MatchShell,
   MatchSpectatorView,
@@ -43,6 +44,96 @@ export interface WalletAuthTransport {
     username: string;
   }): Promise<WalletChallengeResponse>;
 }
+
+export interface SubmitIntentResult {
+  accepted: boolean;
+  appendedEventKinds?: MatchEventKind[];
+  outcome: "applied" | "noop" | "rejected";
+  reason: string | null;
+  seatView: MatchSeatView | null;
+  shell: MatchShell | null;
+}
+
+export type SubmitIntent =
+  | {
+      intentId: string;
+      kind: "keepOpeningHand";
+      matchId: string;
+      payload: Record<string, never>;
+      seat: "seat-0" | "seat-1";
+      stateVersion: number;
+    }
+  | {
+      intentId: string;
+      kind: "takeMulligan";
+      matchId: string;
+      payload: {
+        targetHandSize: number | null;
+      };
+      seat: "seat-0" | "seat-1";
+      stateVersion: number;
+    }
+  | {
+      intentId: string;
+      kind: "activateAbility";
+      matchId: string;
+      payload: {
+        abilityId: string;
+        sourceInstanceId: string;
+      };
+      seat: "seat-0" | "seat-1";
+      stateVersion: number;
+    }
+  | {
+      intentId: string;
+      kind: "playCard";
+      matchId: string;
+      payload: {
+        alternativeCostId: string | null;
+        cardInstanceId: string;
+        sourceZone:
+          | "battlefield"
+          | "command"
+          | "deck"
+          | "graveyard"
+          | "hand"
+          | "laneReserve"
+          | "objective"
+          | "sideboard"
+          | "exile";
+        targetSlotId: string | null;
+      };
+      seat: "seat-0" | "seat-1";
+      stateVersion: number;
+    }
+  | {
+      intentId: string;
+      kind: "passPriority";
+      matchId: string;
+      payload: Record<string, never>;
+      seat: "seat-0" | "seat-1";
+      stateVersion: number;
+    }
+  | {
+      intentId: string;
+      kind: "toggleAutoPass";
+      matchId: string;
+      payload: {
+        enabled: boolean;
+      };
+      seat: "seat-0" | "seat-1";
+      stateVersion: number;
+    }
+  | {
+      intentId: string;
+      kind: "concede";
+      matchId: string;
+      payload: {
+        reason: "disconnect" | "manual" | "timeout";
+      };
+      seat: "seat-0" | "seat-1";
+      stateVersion: number;
+    };
 
 export interface WalletLibraryTransport extends WalletAuthTransport {
   archiveDeck(args: {
@@ -115,6 +206,9 @@ export interface WalletLibraryTransport extends WalletAuthTransport {
     lobbyId: LobbyRecord["id"];
     ready: boolean;
   }): Promise<LobbyMutationResult>;
+  submitIntent(args: {
+    intent: SubmitIntent;
+  }): Promise<SubmitIntentResult>;
 }
 
 export function createConvexWalletAuthTransport(
@@ -249,6 +343,12 @@ export function createConvexWalletAuthTransport(
         api.lobbies.setReady,
         args,
       ) as Promise<LobbyMutationResult>;
+    },
+    submitIntent(args) {
+      return client.mutation(
+        api.matches.submitIntent,
+        args,
+      ) as Promise<SubmitIntentResult>;
     },
     validateDeck(args) {
       return client.query(
