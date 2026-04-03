@@ -13,6 +13,7 @@ import {
   deserializeSeatView,
   deserializeSpectatorView,
 } from "./lib/matches";
+import { assertUserCanEnterPlaySurface } from "./lib/participation";
 import { requireViewerUser } from "./lib/viewer";
 
 async function getDeckOrThrow(
@@ -54,6 +55,10 @@ export const createPractice = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireViewerUser(ctx);
+    await assertUserCanEnterPlaySurface(ctx.db, {
+      actionLabel: "creating a practice match",
+      userId: user._id,
+    });
     const deck = await getDeckOrThrow(ctx, args.deckId);
     assertDeckOwner(deck, user._id);
 

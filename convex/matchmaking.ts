@@ -15,8 +15,11 @@ import {
 } from "./lib/library";
 import { createPersistedMatch, deserializeMatchShell } from "./lib/matches";
 import {
+  assertUserCanEnterPlaySurface,
+  hasBlockingMatchmakingParticipation,
+} from "./lib/participation";
+import {
   compareQueueOrder,
-  hasActiveQueueEntry,
   pickQueueOpponent,
   toQueueEntryRecord,
 } from "./lib/play";
@@ -138,15 +141,10 @@ export const enqueue = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireViewerUser(ctx);
-    const existingEntries = await ctx.db
-      .query("queueEntries")
-      .withIndex("by_userId_and_status", (index) =>
-        index.eq("userId", user._id).eq("status", "queued"),
-      )
-      .collect();
-    if (hasActiveQueueEntry(existingEntries)) {
-      throw new Error("Leave the active queue before entering again");
-    }
+    await assertUserCanEnterPlaySurface(ctx.db, {
+      actionLabel: "entering the casual queue",
+      userId: user._id,
+    });
 
     const deck = await assertPlayableDeck(ctx, {
       deckId: args.deckId,
@@ -199,6 +197,15 @@ export const enqueue = mutation({
       return null;
     });
     if (!opponentDeck) {
+      return toQueueResult(currentEntry, null);
+    }
+    if (
+      await hasBlockingMatchmakingParticipation(ctx.db, opponentEntry.userId)
+    ) {
+      await ctx.db.patch(opponentEntry._id, {
+        status: "cancelled",
+        updatedAt: Date.now(),
+      });
       return toQueueResult(currentEntry, null);
     }
 

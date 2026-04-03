@@ -5,8 +5,6 @@ import type { Doc, Id } from "./_generated/dataModel";
 import {
   type DatabaseReader,
   type DatabaseWriter,
-  type MutationCtx,
-  type QueryCtx,
   mutation,
   query,
 } from "./_generated/server";
@@ -16,6 +14,7 @@ import {
   validateDeckForUserCollection,
 } from "./lib/library";
 import { createPersistedMatch, deserializeMatchShell } from "./lib/matches";
+import { assertUserCanEnterPlaySurface } from "./lib/participation";
 import {
   deriveLobbyCode,
   deriveLobbyStatus,
@@ -98,32 +97,6 @@ async function getWalletAddress(
   return wallet?.address ?? null;
 }
 
-async function listActiveViewerLobbies(
-  ctx: QueryCtx | MutationCtx,
-  userId: Id<"users">,
-) {
-  const [hosted, joined] = await Promise.all([
-    ctx.db
-      .query("lobbies")
-      .withIndex("by_hostUserId_and_updatedAt", (index) =>
-        index.eq("hostUserId", userId),
-      )
-      .order("desc")
-      .take(10),
-    ctx.db
-      .query("lobbies")
-      .withIndex("by_guestUserId_and_updatedAt", (index) =>
-        index.eq("guestUserId", userId),
-      )
-      .order("desc")
-      .take(10),
-  ]);
-
-  return [...hosted, ...joined].filter(
-    (lobby) => lobby.status === "open" || lobby.status === "readyCheck",
-  );
-}
-
 async function getLobbyOrThrow(
   ctx: {
     db: {
@@ -204,10 +177,10 @@ export const createPrivate = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireViewerUser(ctx);
-    const activeLobbies = await listActiveViewerLobbies(ctx, user._id);
-    if (activeLobbies.length > 0) {
-      throw new Error("Leave your current lobby before creating another one");
-    }
+    await assertUserCanEnterPlaySurface(ctx.db, {
+      actionLabel: "creating a private lobby",
+      userId: user._id,
+    });
 
     const deck = await assertPlayableDeck(ctx, {
       deckId: args.deckId,
@@ -253,10 +226,10 @@ export const join = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireViewerUser(ctx);
-    const activeLobbies = await listActiveViewerLobbies(ctx, user._id);
-    if (activeLobbies.length > 0) {
-      throw new Error("Leave your current lobby before joining another one");
-    }
+    await assertUserCanEnterPlaySurface(ctx.db, {
+      actionLabel: "joining another lobby",
+      userId: user._id,
+    });
 
     const lobby = await ctx.db
       .query("lobbies")
@@ -304,6 +277,7 @@ export const join = mutation({
       guestJoinedAt: nextUpdatedAt,
       guestReady: false,
       guestUserId: user._id,
+      hostReady: false,
       guestUsername: user.username,
       guestWalletAddress: walletAddress ?? undefined,
       status: nextStatus,
@@ -343,6 +317,7 @@ export const leave = mutation({
         guestUserId: undefined,
         guestUsername: undefined,
         guestWalletAddress: undefined,
+        hostReady: false,
         status: "open",
         updatedAt: now,
       });

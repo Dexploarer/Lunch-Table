@@ -1,8 +1,8 @@
 import type {
   LobbyRecord,
   LobbyStatus,
+  MatchStatus,
   QueueEntryRecord,
-  QueueEntryStatus,
 } from "@lunchtable/shared-types";
 
 import type { Doc } from "../_generated/dataModel";
@@ -13,6 +13,14 @@ export function normalizeLobbyCode(code: string): string {
 
 export function deriveLobbyCode(lobbyId: string): string {
   return normalizeLobbyCode(lobbyId).slice(0, 6);
+}
+
+export function isActiveLobbyStatus(status: LobbyStatus): boolean {
+  return status === "open" || status === "readyCheck";
+}
+
+export function isActiveMatchStatus(status: MatchStatus): boolean {
+  return status === "pending" || status === "active";
 }
 
 export function deriveLobbyStatus(input: {
@@ -109,11 +117,4 @@ export function pickQueueOpponent(
       )
       .sort(compareQueueOrder)[0] ?? null
   );
-}
-
-export function hasActiveQueueEntry(
-  entries: Array<Pick<Doc<"queueEntries">, "status">>,
-  activeStatus: QueueEntryStatus = "queued",
-) {
-  return entries.some((entry) => entry.status === activeStatus);
 }

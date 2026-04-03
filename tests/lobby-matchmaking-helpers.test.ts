@@ -6,6 +6,8 @@ import {
   compareQueueOrder,
   deriveLobbyCode,
   deriveLobbyStatus,
+  isActiveLobbyStatus,
+  isActiveMatchStatus,
   normalizeLobbyCode,
   pickQueueOpponent,
 } from "../convex/lib/play";
@@ -53,6 +55,18 @@ describe("lobby and matchmaking helpers", () => {
         matchId: "match_1",
       }),
     ).toBe("cancelled");
+  });
+
+  it("treats only open-ready lobbies and pending-active matches as blocking", () => {
+    expect(isActiveLobbyStatus("open")).toBe(true);
+    expect(isActiveLobbyStatus("readyCheck")).toBe(true);
+    expect(isActiveLobbyStatus("matched")).toBe(false);
+    expect(isActiveLobbyStatus("cancelled")).toBe(false);
+
+    expect(isActiveMatchStatus("pending")).toBe(true);
+    expect(isActiveMatchStatus("active")).toBe(true);
+    expect(isActiveMatchStatus("complete")).toBe(false);
+    expect(isActiveMatchStatus("cancelled")).toBe(false);
   });
 
   it("picks the oldest queued opponent from another user", () => {
