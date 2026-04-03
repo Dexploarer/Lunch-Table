@@ -28,7 +28,41 @@ function createMulliganState() {
   });
 
   state.cardCatalog = {
+    "archive-apprentice": {
+      abilities: [
+        {
+          costs: [
+            {
+              amount: 1,
+              kind: "resource",
+              resourceId: "mana",
+            },
+          ],
+          effect: [
+            {
+              amount: 1,
+              kind: "drawCards",
+              target: "controller",
+            },
+          ],
+          id: "study-bolt",
+          kind: "activated",
+          speed: "slow",
+          text: "Pay 1 mana: Draw a card.",
+        },
+      ],
+      cardId: "archive-apprentice",
+      cost: 2,
+      kind: "unit",
+      keywords: [],
+      name: "Archive Apprentice",
+      stats: {
+        power: 1,
+        toughness: 3,
+      },
+    },
     "tidecall-apprentice": {
+      abilities: [],
       cardId: "tidecall-apprentice",
       cost: 1,
       kind: "unit",
@@ -40,6 +74,24 @@ function createMulliganState() {
       },
     },
     "ember-summoner": {
+      abilities: [
+        {
+          effect: [
+            {
+              amount: 2,
+              kind: "dealDamage",
+              target: "opponent",
+            },
+          ],
+          id: "entry-spark",
+          kind: "triggered",
+          text: "When this enters the battlefield, deal 2 damage to the opposing seat.",
+          trigger: {
+            event: "selfEntersBattlefield",
+            kind: "event",
+          },
+        },
+      ],
       cardId: "ember-summoner",
       cost: 2,
       kind: "unit",
@@ -61,7 +113,7 @@ function createMulliganState() {
   seat0.hand = [
     "seat-0:tidecall-apprentice:deck:1",
     "seat-0:ember-summoner:deck:2",
-    "seat-0:tidecall-apprentice:deck:3",
+    "seat-0:archive-apprentice:deck:3",
     "seat-0:tidecall-apprentice:deck:4",
     "seat-0:tidecall-apprentice:deck:5",
     "seat-0:tidecall-apprentice:deck:6",
@@ -210,10 +262,10 @@ describe("applyGameplayIntent", () => {
 
     expect(playTransition.outcome).toBe("applied");
     expect(playTransition.events.map((event) => event.kind)).toEqual([
-      "cardMoved",
       "cardPlayed",
+      "stackObjectCreated",
     ]);
-    expect(playTransition.nextState.seats["seat-0"]?.battlefield).toContain(
+    expect(playTransition.nextState.seats["seat-0"]?.battlefield).not.toContain(
       "seat-0:tidecall-apprentice:deck:1",
     );
     expect(playTransition.nextState.seats["seat-0"]?.hand).not.toContain(
@@ -251,10 +303,179 @@ describe("applyGameplayIntent", () => {
     expect(secondPass.outcome).toBe("applied");
     expect(secondPass.events.map((event) => event.kind)).toEqual([
       "priorityPassed",
+      "stackObjectResolved",
+      "cardMoved",
+    ]);
+    expect(secondPass.nextState.seats["seat-0"]?.battlefield).toContain(
+      "seat-0:tidecall-apprentice:deck:1",
+    );
+    expect(secondPass.nextState.shell.phase).toBe("main1");
+    expect(secondPass.nextState.shell.prioritySeat).toBe("seat-0");
+
+    const thirdPass = applyGameplayIntent(secondPass.nextState, {
+      intentId: "intent_pass_003",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-0",
+      stateVersion: secondPass.nextState.shell.version,
+    });
+    const fourthPass = applyGameplayIntent(thirdPass.nextState, {
+      intentId: "intent_pass_004",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-1",
+      stateVersion: thirdPass.nextState.shell.version,
+    });
+
+    expect(fourthPass.events.map((event) => event.kind)).toEqual([
+      "priorityPassed",
       "phaseAdvanced",
     ]);
-    expect(secondPass.nextState.shell.phase).toBe("attack");
+    expect(fourthPass.nextState.shell.phase).toBe("attack");
+  });
+
+  it("enqueues and resolves self-enter triggers before priority resumes", () => {
+    const state = keepBothOpeningHands();
+    state.seats["seat-0"].resources = [
+      {
+        current: 2,
+        label: "Mana",
+        maximum: 2,
+        resourceId: "mana",
+      },
+    ];
+
+    const playTransition = applyGameplayIntent(state, {
+      intentId: "intent_play_ember_001",
+      kind: "playCard",
+      matchId: state.shell.id,
+      payload: {
+        alternativeCostId: null,
+        cardInstanceId: "seat-0:ember-summoner:deck:2",
+        sourceZone: "hand",
+        targetSlotId: null,
+      },
+      seat: "seat-0",
+      stateVersion: state.shell.version,
+    });
+    const firstPass = applyGameplayIntent(playTransition.nextState, {
+      intentId: "intent_pass_ember_001",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-1",
+      stateVersion: playTransition.nextState.shell.version,
+    });
+    const secondPass = applyGameplayIntent(firstPass.nextState, {
+      intentId: "intent_pass_ember_002",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-0",
+      stateVersion: firstPass.nextState.shell.version,
+    });
+
+    expect(secondPass.events.map((event) => event.kind)).toEqual([
+      "priorityPassed",
+      "stackObjectResolved",
+      "cardMoved",
+      "stackObjectCreated",
+    ]);
+    expect(secondPass.nextState.stack).toHaveLength(1);
     expect(secondPass.nextState.shell.prioritySeat).toBe("seat-0");
+
+    const thirdPass = applyGameplayIntent(secondPass.nextState, {
+      intentId: "intent_pass_ember_003",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-0",
+      stateVersion: secondPass.nextState.shell.version,
+    });
+    const fourthPass = applyGameplayIntent(thirdPass.nextState, {
+      intentId: "intent_pass_ember_004",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-1",
+      stateVersion: thirdPass.nextState.shell.version,
+    });
+
+    expect(fourthPass.events.map((event) => event.kind)).toEqual([
+      "priorityPassed",
+      "stackObjectResolved",
+      "lifeTotalChanged",
+    ]);
+    expect(fourthPass.nextState.stack).toHaveLength(0);
+    expect(fourthPass.nextState.seats["seat-1"]?.lifeTotal).toBe(18);
+  });
+
+  it("puts activated abilities on the stack and resolves them with the same parity as cards", () => {
+    const state = keepBothOpeningHands();
+    state.seats["seat-0"].battlefield.push(
+      "seat-0:archive-apprentice:battlefield:1",
+    );
+    state.seats["seat-0"].resources = [
+      {
+        current: 1,
+        label: "Mana",
+        maximum: 1,
+        resourceId: "mana",
+      },
+    ];
+    state.seats["seat-0"].deck = [
+      "seat-0:tidecall-apprentice:deck:draw1",
+      ...state.seats["seat-0"].deck,
+    ];
+
+    const activateTransition = applyGameplayIntent(state, {
+      intentId: "intent_activate_001",
+      kind: "activateAbility",
+      matchId: state.shell.id,
+      payload: {
+        abilityId: "study-bolt",
+        sourceInstanceId: "seat-0:archive-apprentice:battlefield:1",
+      },
+      seat: "seat-0",
+      stateVersion: state.shell.version,
+    });
+
+    expect(activateTransition.events.map((event) => event.kind)).toEqual([
+      "abilityActivated",
+      "stackObjectCreated",
+    ]);
+    expect(activateTransition.nextState.stack).toHaveLength(1);
+    expect(
+      activateTransition.nextState.seats["seat-0"]?.resources[0]?.current,
+    ).toBe(0);
+
+    const firstPass = applyGameplayIntent(activateTransition.nextState, {
+      intentId: "intent_activate_pass_001",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-1",
+      stateVersion: activateTransition.nextState.shell.version,
+    });
+    const secondPass = applyGameplayIntent(firstPass.nextState, {
+      intentId: "intent_activate_pass_002",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-0",
+      stateVersion: firstPass.nextState.shell.version,
+    });
+
+    expect(secondPass.events.map((event) => event.kind)).toEqual([
+      "priorityPassed",
+      "stackObjectResolved",
+    ]);
+    expect(secondPass.nextState.stack).toHaveLength(0);
+    expect(secondPass.nextState.seats["seat-0"]?.hand).toContain(
+      "seat-0:tidecall-apprentice:deck:draw1",
+    );
   });
 
   it("rejects card play from a seat without priority", () => {

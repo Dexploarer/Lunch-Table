@@ -12,7 +12,13 @@ import type {
   StackObjectId,
   UserId,
 } from "@lunchtable/shared-types";
-import type { CardKind } from "./dsl";
+import type {
+  ActivatedAbility,
+  CardAbility,
+  CardKind,
+  EffectNode,
+  TriggeredAbility,
+} from "./dsl";
 
 export interface MatchRandomState {
   cursor: number;
@@ -22,6 +28,7 @@ export interface MatchRandomState {
 export interface MatchResourceState extends SeatResourceView {}
 
 export interface MatchCardCatalogEntry {
+  abilities: CardAbility[];
   cardId: string;
   cost: number;
   kind: CardKind;
@@ -53,12 +60,30 @@ export interface MatchPromptState {
 }
 
 export interface MatchStackObjectState {
+  abilityId: string | null;
+  cardId: string | null;
   controllerSeat: SeatId;
+  destinationZone: "battlefield" | "graveyard" | null;
+  effects: EffectNode[];
+  kind: "activatedAbility" | "castCard" | "triggeredAbility";
   label: string;
+  originZone: "battlefield" | "hand" | null;
   sourceInstanceId: CardInstanceId | null;
   stackId: StackObjectId;
   status: "countered" | "fizzled" | "pending" | "resolved";
   targetIds: string[];
+}
+
+export function isActivatedAbility(
+  ability: CardAbility,
+): ability is ActivatedAbility {
+  return ability.kind === "activated";
+}
+
+export function isTriggeredAbility(
+  ability: CardAbility,
+): ability is TriggeredAbility {
+  return ability.kind === "triggered";
 }
 
 export interface MatchSeatState {

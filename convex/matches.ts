@@ -48,6 +48,17 @@ const gameplayIntentValidator = v.union(
   }),
   v.object({
     intentId: v.string(),
+    kind: v.literal("activateAbility"),
+    matchId: v.string(),
+    payload: v.object({
+      abilityId: v.string(),
+      sourceInstanceId: v.string(),
+    }),
+    seat: gameplaySeatValidator,
+    stateVersion: v.number(),
+  }),
+  v.object({
+    intentId: v.string(),
     kind: v.literal("playCard"),
     matchId: v.string(),
     payload: v.object({

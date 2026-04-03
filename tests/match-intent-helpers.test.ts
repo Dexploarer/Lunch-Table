@@ -103,4 +103,74 @@ describe("persisted intent helpers", () => {
     expect(rejected.allEvents).toHaveLength(bundle.events.length);
     expect(rejected.state).toEqual(bundle.state);
   });
+
+  it("rebuilds the stack rail after a cast enters the response window", () => {
+    const bundle = createActiveBundle();
+    const keepSeat0 = buildPersistedIntentResult({
+      events: bundle.events,
+      intent: {
+        intentId: "intent_keep_stack_001",
+        kind: "keepOpeningHand",
+        matchId: bundle.shell.id,
+        payload: {},
+        seat: "seat-0",
+        stateVersion: bundle.shell.version,
+      },
+      state: bundle.state,
+    });
+    const keepSeat1 = buildPersistedIntentResult({
+      events: keepSeat0.allEvents,
+      intent: {
+        intentId: "intent_keep_stack_002",
+        kind: "keepOpeningHand",
+        matchId: bundle.shell.id,
+        payload: {},
+        seat: "seat-1",
+        stateVersion: keepSeat0.state.shell.version,
+      },
+      state: keepSeat0.state,
+    });
+
+    keepSeat1.state.seats["seat-0"].resources = [
+      {
+        current: 10,
+        label: "Mana",
+        maximum: 10,
+        resourceId: "mana",
+      },
+    ];
+
+    const cardInstanceId = keepSeat1.state.seats["seat-0"].hand[0];
+    if (!cardInstanceId) {
+      throw new Error("Expected opening hand to contain a card");
+    }
+
+    const castResult = buildPersistedIntentResult({
+      events: keepSeat1.allEvents,
+      intent: {
+        intentId: "intent_stack_cast_001",
+        kind: "playCard",
+        matchId: bundle.shell.id,
+        payload: {
+          alternativeCostId: null,
+          cardInstanceId,
+          sourceZone: "hand",
+          targetSlotId: null,
+        },
+        seat: "seat-0",
+        stateVersion: keepSeat1.state.shell.version,
+      },
+      state: keepSeat1.state,
+    });
+
+    expect(castResult.transition.outcome).toBe("applied");
+    expect(castResult.appendedEvents.map((event) => event.kind)).toEqual([
+      "cardPlayed",
+      "stackObjectCreated",
+    ]);
+    expect(
+      castResult.views.find((view) => view.viewerSeat === "seat-0")?.view.stack,
+    ).toHaveLength(1);
+    expect(castResult.shell.prioritySeat).toBe("seat-1");
+  });
 });

@@ -214,6 +214,42 @@ function createRecentEventSummary(event: MatchEvent): MatchEventSummary {
     };
   }
 
+  if (event.kind === "abilityActivated") {
+    return {
+      kind: event.kind,
+      label: `Activated ${event.payload.abilityId}`,
+      seat: event.payload.seat,
+      sequence: event.sequence,
+    };
+  }
+
+  if (event.kind === "stackObjectCreated") {
+    return {
+      kind: event.kind,
+      label: `Stack: ${event.payload.label}`,
+      seat: event.payload.controllerSeat,
+      sequence: event.sequence,
+    };
+  }
+
+  if (event.kind === "stackObjectResolved") {
+    return {
+      kind: event.kind,
+      label: `Resolved ${event.payload.stackId}`,
+      seat: null,
+      sequence: event.sequence,
+    };
+  }
+
+  if (event.kind === "lifeTotalChanged") {
+    return {
+      kind: event.kind,
+      label: `Life ${event.payload.from} -> ${event.payload.to}`,
+      seat: event.payload.seat,
+      sequence: event.sequence,
+    };
+  }
+
   return {
     kind: event.kind,
     label: event.kind,
@@ -326,6 +362,18 @@ function createPromptView(
   };
 }
 
+function seatHasActivatedAbility(state: MatchState, viewerSeat: SeatId) {
+  return state.seats[viewerSeat].battlefield.some((instanceId) =>
+    state.cardCatalog[cardIdFromInstanceId(instanceId)]?.abilities.some(
+      (ability) =>
+        ability.kind === "activated" &&
+        (ability.speed === "fast" ||
+          ((state.shell.phase === "main1" || state.shell.phase === "main2") &&
+            state.stack.length === 0)),
+    ),
+  );
+}
+
 function createAvailableIntents(
   state: MatchState,
   viewerSeat: SeatId,
@@ -343,6 +391,9 @@ function createAvailableIntents(
     state.shell.prioritySeat === viewerSeat &&
     !prompt
   ) {
+    if (seatHasActivatedAbility(state, viewerSeat)) {
+      intents.unshift("activateAbility");
+    }
     if (
       (state.shell.phase === "main1" || state.shell.phase === "main2") &&
       viewerState.hand.length > 0

@@ -10,6 +10,8 @@ import {
   type MatchState,
   createMatchShellFromState,
   deriveDeterministicNumber,
+  isActivatedAbility,
+  isTriggeredAbility,
 } from "./state";
 
 export interface MatchTransition {
@@ -20,6 +22,7 @@ export interface MatchTransition {
 }
 
 export type MatchTransitionReason =
+  | "abilityNotFound"
   | "cardNotFound"
   | "cardNotInZone"
   | "insufficientResources"
@@ -31,6 +34,8 @@ export type MatchTransitionReason =
   | "matchComplete"
   | "notPriorityOwner"
   | "staleStateVersion"
+  | "unsupportedCost"
+  | "unsupportedTargeting"
   | "unsupportedIntent";
 
 const MAIN_PHASES = new Set<MatchPhase>(["main1", "main2"]);
@@ -74,6 +79,7 @@ function cloneCardCatalog(state: MatchState["cardCatalog"]) {
       cardId,
       {
         ...entry,
+        abilities: entry.abilities,
         keywords: [...entry.keywords],
         stats: entry.stats ? { ...entry.stats } : undefined,
       },
@@ -210,6 +216,296 @@ function drawCards(seat: MatchState["seats"][SeatId], count: number) {
   const drawn = seat.deck.splice(0, count);
   seat.hand.push(...drawn);
   return drawn;
+}
+
+function getCardCatalogEntry(
+  state: MatchState,
+  instanceId: string,
+): MatchState["cardCatalog"][string] | null {
+  return state.cardCatalog[getCardIdFromInstanceId(instanceId)] ?? null;
+}
+
+function hasUnsupportedEffects(
+  effects: MatchState["stack"][number]["effects"],
+) {
+  return effects.some((effect) => {
+    switch (effect.kind) {
+      case "drawCards":
+      case "adjustResource":
+      case "dealDamage":
+      case "setAutoPass":
+        return effect.target === "target";
+      default:
+        return true;
+    }
+  });
+}
+
+function createStackObjectId(state: MatchState, offset = 0) {
+  return `stack_${state.eventSequence + state.stack.length + offset + 1}`;
+}
+
+function createStackObject(
+  state: MatchState,
+  input: Omit<
+    MatchState["stack"][number],
+    "stackId" | "status" | "targetIds"
+  > & {
+    targetIds?: string[];
+  },
+) {
+  const stackObject = {
+    ...input,
+    stackId: createStackObjectId(state),
+    status: "pending" as const,
+    targetIds: [...(input.targetIds ?? [])],
+  };
+  state.stack.push(stackObject);
+  return stackObject;
+}
+
+function createStackObjectCreatedEvents(
+  createEvent: ReturnType<typeof createEventFactory>,
+  stackObjects: MatchState["stack"],
+) {
+  return stackObjects.map((stackObject) =>
+    createEvent("stackObjectCreated", {
+      controllerSeat: stackObject.controllerSeat,
+      label: stackObject.label,
+      stackId: stackObject.stackId,
+    }),
+  );
+}
+
+function ensureResource(
+  seat: MatchState["seats"][SeatId],
+  resourceId: string,
+  label = "Mana",
+) {
+  let resource = seat.resources.find(
+    (seatResource) => seatResource.resourceId === resourceId,
+  );
+  if (!resource) {
+    resource = {
+      current: 0,
+      label,
+      maximum: 0,
+      resourceId,
+    };
+    seat.resources.push(resource);
+  }
+  return resource;
+}
+
+function applyLifeTotalCheck(
+  state: MatchState,
+  createEvent: ReturnType<typeof createEventFactory>,
+) {
+  const defeatedSeats = getSeatIds(state).filter(
+    (seatId) => (state.seats[seatId]?.lifeTotal ?? 1) <= 0,
+  );
+  if (defeatedSeats.length === 0 || state.shell.status === "complete") {
+    return [] as MatchEvent[];
+  }
+
+  state.shell.status = "complete";
+  state.shell.completedAt = state.shell.startedAt ?? state.shell.createdAt;
+  state.shell.winnerSeat =
+    defeatedSeats.length === 1
+      ? getOtherSeatId(state, defeatedSeats[0] ?? "seat-0")
+      : null;
+
+  return [
+    createEvent("matchCompleted", {
+      reason: defeatedSeats.length > 1 ? "draw" : "elimination",
+      winnerSeat: state.shell.winnerSeat,
+    }),
+  ];
+}
+
+function applyEffectSequence(
+  state: MatchState,
+  createEvent: ReturnType<typeof createEventFactory>,
+  input: {
+    controllerSeat: SeatId;
+    effects: MatchState["stack"][number]["effects"];
+  },
+) {
+  const events: MatchEvent[] = [];
+
+  for (const effect of input.effects) {
+    if (effect.kind === "drawCards") {
+      const targetSeatId =
+        effect.target === "controller"
+          ? input.controllerSeat
+          : getOtherSeatId(state, input.controllerSeat);
+      if (targetSeatId) {
+        drawCards(state.seats[targetSeatId], effect.amount);
+      }
+      continue;
+    }
+
+    if (effect.kind === "adjustResource") {
+      const targetSeatId =
+        effect.target === "controller"
+          ? input.controllerSeat
+          : getOtherSeatId(state, input.controllerSeat);
+      if (targetSeatId) {
+        const resource = ensureResource(
+          state.seats[targetSeatId],
+          effect.resourceId,
+          effect.resourceId === "mana" ? "Mana" : effect.resourceId,
+        );
+        resource.current += effect.amount;
+        if (resource.maximum !== null) {
+          resource.maximum = Math.max(resource.maximum ?? 0, resource.current);
+        }
+      }
+      continue;
+    }
+
+    if (effect.kind === "dealDamage") {
+      const targetSeatId =
+        effect.target === "opponent"
+          ? getOtherSeatId(state, input.controllerSeat)
+          : null;
+      if (targetSeatId) {
+        const seat = state.seats[targetSeatId];
+        const previousLifeTotal = seat.lifeTotal;
+        seat.lifeTotal -= effect.amount;
+        events.push(
+          createEvent("lifeTotalChanged", {
+            from: previousLifeTotal,
+            reason: "stackEffect",
+            seat: targetSeatId,
+            to: seat.lifeTotal,
+          }),
+        );
+        events.push(...applyLifeTotalCheck(state, createEvent));
+      }
+      continue;
+    }
+
+    if (effect.kind === "setAutoPass") {
+      state.seats[input.controllerSeat].autoPassEnabled = effect.value;
+    }
+  }
+
+  return events;
+}
+
+function enqueueSelfEntersBattlefieldTriggers(
+  state: MatchState,
+  createEvent: ReturnType<typeof createEventFactory>,
+  input: {
+    controllerSeat: SeatId;
+    sourceInstanceId: string;
+  },
+) {
+  const cardEntry = getCardCatalogEntry(state, input.sourceInstanceId);
+  if (!cardEntry) {
+    return [] as MatchEvent[];
+  }
+
+  const triggeredAbilities = cardEntry.abilities.filter(
+    (
+      ability,
+    ): ability is Extract<
+      (typeof cardEntry.abilities)[number],
+      { kind: "triggered" }
+    > => {
+      return (
+        isTriggeredAbility(ability) &&
+        ability.trigger.kind === "event" &&
+        ability.trigger.event === "selfEntersBattlefield" &&
+        !ability.condition &&
+        !hasUnsupportedEffects(ability.effect)
+      );
+    },
+  );
+
+  if (triggeredAbilities.length === 0) {
+    return [] as MatchEvent[];
+  }
+
+  const createdObjects = triggeredAbilities.map((ability) =>
+    createStackObject(state, {
+      abilityId: ability.id,
+      cardId: cardEntry.cardId,
+      controllerSeat: input.controllerSeat,
+      destinationZone: null,
+      effects: ability.effect,
+      kind: "triggeredAbility",
+      label: `${cardEntry.name}: ${ability.text}`,
+      originZone: "battlefield",
+      sourceInstanceId: input.sourceInstanceId,
+      targetIds: [],
+    }),
+  );
+
+  state.shell.prioritySeat = state.shell.activeSeat;
+  state.lastPriorityPassSeat = null;
+  return createStackObjectCreatedEvents(createEvent, createdObjects);
+}
+
+function resolveTopOfStack(
+  state: MatchState,
+  createEvent: ReturnType<typeof createEventFactory>,
+) {
+  const stackObject = state.stack.pop();
+  if (!stackObject) {
+    return [] as MatchEvent[];
+  }
+
+  const events: MatchEvent[] = [
+    createEvent("stackObjectResolved", {
+      resolution: "resolved",
+      stackId: stackObject.stackId,
+    }),
+  ];
+
+  if (
+    stackObject.kind === "castCard" &&
+    stackObject.sourceInstanceId &&
+    stackObject.destinationZone
+  ) {
+    const destinationZone = getZoneReference(
+      state.seats[stackObject.controllerSeat],
+      stackObject.destinationZone,
+    );
+    if (destinationZone) {
+      destinationZone.push(stackObject.sourceInstanceId);
+      events.push(
+        createEvent("cardMoved", {
+          cardInstanceId: stackObject.sourceInstanceId,
+          fromZone: stackObject.originZone ?? "hand",
+          publicReason: "resolved",
+          toZone: stackObject.destinationZone,
+        }),
+      );
+      if (stackObject.destinationZone === "battlefield") {
+        events.push(
+          ...enqueueSelfEntersBattlefieldTriggers(state, createEvent, {
+            controllerSeat: stackObject.controllerSeat,
+            sourceInstanceId: stackObject.sourceInstanceId,
+          }),
+        );
+      }
+    }
+  }
+
+  if (stackObject.effects.length > 0) {
+    events.push(
+      ...applyEffectSequence(state, createEvent, {
+        controllerSeat: stackObject.controllerSeat,
+        effects: stackObject.effects,
+      }),
+    );
+  }
+
+  state.shell.prioritySeat = state.shell.activeSeat;
+  state.lastPriorityPassSeat = null;
+  return events;
 }
 
 function finalizeState(
@@ -499,30 +795,167 @@ export function reduceGameplayIntent(
     }
 
     sourceZone.splice(cardIndex, 1);
-    const destinationZone =
-      catalogEntry.kind === "spell" ? nextSeat.graveyard : nextSeat.battlefield;
     const destinationKind: ZoneKind =
       catalogEntry.kind === "spell" ? "graveyard" : "battlefield";
-    destinationZone.push(intent.payload.cardInstanceId);
     manaResource.current -= catalogEntry.cost;
     nextState.lastPriorityPassSeat = null;
     nextState.shell.prioritySeat = getOtherSeatId(nextState, intent.seat);
+    const stackObject = createStackObject(nextState, {
+      abilityId: null,
+      cardId: catalogEntry.cardId,
+      controllerSeat: intent.seat,
+      destinationZone: destinationKind,
+      effects: [],
+      kind: "castCard",
+      label: catalogEntry.name,
+      originZone: intent.payload.sourceZone,
+      sourceInstanceId: intent.payload.cardInstanceId,
+    });
     nextState.shell.version += 1;
 
     const events: MatchEvent[] = [
-      createEvent("cardMoved", {
-        cardInstanceId: intent.payload.cardInstanceId,
-        fromZone: intent.payload.sourceZone,
-        publicReason: "cast",
-        toZone: destinationKind,
-      }),
       createEvent("cardPlayed", {
         cardInstanceId: intent.payload.cardInstanceId,
         seat: intent.seat,
         toZone: destinationKind,
       }),
+      createEvent("stackObjectCreated", {
+        controllerSeat: intent.seat,
+        label: stackObject.label,
+        stackId: stackObject.stackId,
+      }),
     ];
     return finalizeState(nextState, events);
+  }
+
+  if (intent.kind === "activateAbility") {
+    if (nextState.shell.prioritySeat !== intent.seat) {
+      return {
+        events: [],
+        nextState: state,
+        outcome: "rejected",
+        reason: "notPriorityOwner",
+      };
+    }
+
+    const sourceCard = getCardCatalogEntry(
+      nextState,
+      intent.payload.sourceInstanceId,
+    );
+    if (!sourceCard) {
+      return {
+        events: [],
+        nextState: state,
+        outcome: "rejected",
+        reason: "cardNotFound",
+      };
+    }
+
+    if (!nextSeat.battlefield.includes(intent.payload.sourceInstanceId)) {
+      return {
+        events: [],
+        nextState: state,
+        outcome: "rejected",
+        reason: "cardNotInZone",
+      };
+    }
+
+    const cardAbility = sourceCard.abilities.find(
+      (ability) => ability.id === intent.payload.abilityId,
+    );
+    if (!cardAbility || !isActivatedAbility(cardAbility)) {
+      return {
+        events: [],
+        nextState: state,
+        outcome: "rejected",
+        reason: "abilityNotFound",
+      };
+    }
+    const ability = cardAbility;
+    if (
+      (ability.targets?.length ?? 0) > 0 ||
+      hasUnsupportedEffects(ability.effect)
+    ) {
+      return {
+        events: [],
+        nextState: state,
+        outcome: "rejected",
+        reason: "unsupportedTargeting",
+      };
+    }
+    if (ability.costs.some((cost) => cost.kind !== "resource")) {
+      return {
+        events: [],
+        nextState: state,
+        outcome: "rejected",
+        reason: "unsupportedCost",
+      };
+    }
+    const resourceCosts = ability.costs.filter(
+      (
+        cost,
+      ): cost is Extract<
+        (typeof ability.costs)[number],
+        { kind: "resource" }
+      > => cost.kind === "resource",
+    );
+    if (
+      ability.speed === "slow" &&
+      (!MAIN_PHASES.has(nextState.shell.phase) || nextState.stack.length > 0)
+    ) {
+      return {
+        events: [],
+        nextState: state,
+        outcome: "rejected",
+        reason: "invalidPhase",
+      };
+    }
+
+    for (const cost of resourceCosts) {
+      const resource = ensureResource(nextSeat, cost.resourceId);
+      if (resource.current < cost.amount) {
+        return {
+          events: [],
+          nextState: state,
+          outcome: "rejected",
+          reason: "insufficientResources",
+        };
+      }
+    }
+
+    for (const cost of resourceCosts) {
+      const resource = ensureResource(nextSeat, cost.resourceId);
+      resource.current -= cost.amount;
+    }
+
+    const stackObject = createStackObject(nextState, {
+      abilityId: ability.id,
+      cardId: sourceCard.cardId,
+      controllerSeat: intent.seat,
+      destinationZone: null,
+      effects: ability.effect,
+      kind: "activatedAbility",
+      label: `${sourceCard.name}: ${ability.text}`,
+      originZone: "battlefield",
+      sourceInstanceId: intent.payload.sourceInstanceId,
+    });
+
+    nextState.lastPriorityPassSeat = null;
+    nextState.shell.prioritySeat = getOtherSeatId(nextState, intent.seat);
+    nextState.shell.version += 1;
+
+    return finalizeState(nextState, [
+      createEvent("abilityActivated", {
+        abilityId: ability.id,
+        seat: intent.seat,
+        sourceInstanceId: intent.payload.sourceInstanceId,
+      }),
+      createEvent("stackObjectCreated", {
+        controllerSeat: intent.seat,
+        label: stackObject.label,
+        stackId: stackObject.stackId,
+      }),
+    ]);
   }
 
   if (intent.kind === "passPriority") {
@@ -544,21 +977,25 @@ export function reduceGameplayIntent(
     ];
 
     if (otherSeat && nextState.lastPriorityPassSeat === otherSeat) {
-      const previousPhase = nextState.shell.phase;
-      advancePhase(nextState);
-      events.push(
-        createEvent("phaseAdvanced", {
-          from: previousPhase,
-          to: nextState.shell.phase,
-        }),
-      );
-      if (previousPhase === "cleanup") {
+      if (nextState.stack.length > 0) {
+        events.push(...resolveTopOfStack(nextState, createEvent));
+      } else {
+        const previousPhase = nextState.shell.phase;
+        advancePhase(nextState);
         events.push(
-          createEvent("turnAdvanced", {
-            activeSeat: nextState.shell.activeSeat ?? intent.seat,
-            turnNumber: nextState.shell.turnNumber,
+          createEvent("phaseAdvanced", {
+            from: previousPhase,
+            to: nextState.shell.phase,
           }),
         );
+        if (previousPhase === "cleanup") {
+          events.push(
+            createEvent("turnAdvanced", {
+              activeSeat: nextState.shell.activeSeat ?? intent.seat,
+              turnNumber: nextState.shell.turnNumber,
+            }),
+          );
+        }
       }
     } else {
       nextState.lastPriorityPassSeat = intent.seat;

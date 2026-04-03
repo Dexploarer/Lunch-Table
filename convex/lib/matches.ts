@@ -188,6 +188,7 @@ function buildCardCatalog(format: FormatDefinition): MatchState["cardCatalog"] {
   return Object.fromEntries(
     format.cardPool.map((card) => {
       const entry: MatchCardCatalogEntry = {
+        abilities: card.abilities,
         cardId: card.id,
         cost: card.cost,
         kind: card.kind,
