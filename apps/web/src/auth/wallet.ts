@@ -1,7 +1,10 @@
+import {
+  BSC_CHAIN_ID,
+  type WalletChallengeMessageInput,
+  buildWalletChallengeMessage,
+} from "@lunchtable/shared-types";
 import { isHex, verifyMessage } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-
-export const BSC_CHAIN_ID = 56;
 
 export interface LocalBscWallet {
   address: `0x${string}`;
@@ -9,17 +12,7 @@ export interface LocalBscWallet {
   privateKey: `0x${string}`;
 }
 
-export interface WalletChallengePayload {
-  address: `0x${string}`;
-  domain: string;
-  email?: string;
-  issuedAt: string;
-  nonce: string;
-  requestId?: string;
-  statement: string;
-  uri: string;
-  username?: string;
-}
+export type WalletChallengePayload = WalletChallengeMessageInput;
 
 export function createLocalBscWallet(): LocalBscWallet {
   const privateKey = generatePrivateKey();
@@ -59,22 +52,7 @@ export function normalizePrivateKey(value: string): `0x${string}` {
 export function buildSignupChallengeMessage(
   payload: WalletChallengePayload,
 ): string {
-  return [
-    `${payload.domain} wants you to sign in with your BSC account:`,
-    payload.address,
-    "",
-    payload.statement,
-    payload.username ? `Username: ${payload.username}` : undefined,
-    payload.email ? `Email: ${payload.email}` : undefined,
-    `URI: ${payload.uri}`,
-    "Version: 1",
-    `Chain ID: ${BSC_CHAIN_ID}`,
-    `Nonce: ${payload.nonce}`,
-    `Issued At: ${payload.issuedAt}`,
-    payload.requestId ? `Request ID: ${payload.requestId}` : undefined,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return buildWalletChallengeMessage(payload);
 }
 
 export async function signChallenge(

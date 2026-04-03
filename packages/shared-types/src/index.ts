@@ -8,3 +8,13 @@ export interface MatchSkeleton {
   status: MatchStatus;
   version: number;
 }
+
+export {
+  BSC_CHAIN_ID,
+  buildWalletChallengeMessage,
+} from "./auth";
+
+export type {
+  WalletChallengeMessageInput,
+  WalletChallengePurpose,
+} from "./auth";

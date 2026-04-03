@@ -7,6 +7,7 @@
     "dev": "bun run dev:web",
     "dev:web": "bun run --cwd apps/web dev",
     "dev:bot": "bun run --cwd apps/bot-runner dev",
+    "dev:convex": "bunx convex dev",
     "build": "bun run build:web && bun run build:bot",
     "build:web": "bun run --cwd apps/web build",
     "build:bot": "bun run --cwd apps/bot-runner build",
@@ -15,8 +16,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:unit": "vitest run",
+    "test:convex": "vitest run tests/convex-auth-helpers.test.ts",
     "test:rules": "vitest run packages/game-core/src",
     "test:replay": "vitest run tests/replay-contract.test.ts"
+  },
+  "dependencies": {
+    "convex": "1.34.1",
+    "jose": "6.2.2",
+    "viem": "2.47.6"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
@@ -25,7 +32,6 @@
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
     "typescript": "^5.9.3",
-    "viem": "2.47.6",
     "vite": "^7.1.10",
     "vitest": "^3.2.4"
   }

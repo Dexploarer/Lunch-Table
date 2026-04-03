@@ -1,5 +1,5 @@
+export { BSC_CHAIN_ID } from "@lunchtable/shared-types";
 export {
-  BSC_CHAIN_ID,
   buildSignupChallengeMessage,
   createLocalBscWallet,
   importLocalBscWallet,

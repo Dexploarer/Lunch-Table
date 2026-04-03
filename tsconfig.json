@@ -24,6 +24,7 @@
   "include": [
     "apps/**/*.ts",
     "apps/**/*.tsx",
+    "convex/**/*.ts",
     "packages/**/*.ts",
     "packages/**/*.tsx",
     "tests/**/*.ts",

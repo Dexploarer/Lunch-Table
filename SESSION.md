@@ -2,7 +2,7 @@
 
 **Current Phase**: Phase 2
 **Current Stage**: Implementation
-**Last Checkpoint**: 383aa2a (2026-04-03)
+**Last Checkpoint**: 3db28e4 (2026-04-03)
 **Planning Docs**: `IMPLEMENTATION_PHASES.md`, `docs/ARCHITECTURE.md`, `docs/GAME_RULES_SPEC.md`, `docs/CONVEX_BACKEND_SPEC.md`, `docs/WALLET_AUTH_SPEC.md`
 
 ---
@@ -21,7 +21,7 @@
 
 ## Phase 2: Convex Bootstrap and Auth 🔄
 **Spec**: `IMPLEMENTATION_PHASES.md#phase-2-convex-bootstrap-and-auth`
-**Next Action**: Initialize Convex and implement wallet challenge issuance, signature verification, and canonical users/wallets/wallet_challenges tables.
+**Next Action**: Hook the signup/login UI to requestSignupChallenge, completeWalletSignup, requestLoginChallenge, and completeWalletLogin, then run Convex dev/codegen to replace generic wrappers with generated server types.
 
 ## Phase 3: Shared Domain Types ⏸️
 **Spec**: `IMPLEMENTATION_PHASES.md#phase-3-shared-domain-types`

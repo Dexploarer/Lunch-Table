@@ -20,6 +20,11 @@ export function App() {
           The repository skeleton is live. Next up is Convex auth, match shell
           persistence, and the first authoritative gameplay mutation.
         </p>
+        <p className="lede">
+          Authentication is wallet-based: users sign up with email, username,
+          and a locally generated self-custodied BSC wallet. The private key
+          never passes through Convex.
+        </p>
       </section>
 
       <section className="panel">
