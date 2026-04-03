@@ -1,7 +1,14 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
   "files": {
-    "ignore": [".phase-loop/**", "coverage/**", "dist/**", "apps/**/dist/**"]
+    "ignore": [
+      ".convex/**",
+      ".phase-loop/**",
+      "coverage/**",
+      "dist/**",
+      "apps/**/dist/**",
+      "convex/_generated/**"
+    ]
   },
   "formatter": {
     "enabled": true,

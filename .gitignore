@@ -1,7 +1,14 @@
 .DS_Store
+.convex/
+.agents/
 node_modules/
 dist/
 coverage/
 .env
 .env.*
 .phase-loop/logs/
+.claude/
+.factory/
+.neovate/
+CLAUDE.md
+skills-lock.json

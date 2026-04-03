@@ -1,4 +1,6 @@
-import { verifyMessage } from "viem";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { bytesToHex, hashMessage, hexToBytes, isAddressEqual } from "viem";
+import { publicKeyToAddress } from "viem/accounts";
 
 export const AUTH_CHAIN_ID = 56 as const;
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -115,11 +117,38 @@ export async function verifyWalletChallengeSignature(input: {
   message: string;
   signature: `0x${string}`;
 }): Promise<boolean> {
-  return verifyMessage({
-    address: input.address,
-    message: input.message,
-    signature: input.signature,
-  });
+  const signature = input.signature;
+  if (signature.length !== 132) {
+    throw new Error("Invalid wallet signature");
+  }
+
+  const recoveryBit = toRecoveryBit(Number.parseInt(signature.slice(130), 16));
+  const compactSignature = hexToBytes(`0x${signature.slice(2, 130)}`);
+  const recoveredPublicKey = secp256k1.Signature.fromBytes(
+    compactSignature,
+    "compact",
+  )
+    .addRecoveryBit(recoveryBit)
+    .recoverPublicKey(hexToBytes(hashMessage(input.message)))
+    .toBytes(false);
+
+  return isAddressEqual(
+    publicKeyToAddress(bytesToHex(recoveredPublicKey)),
+    input.address,
+  );
+}
+
+function toRecoveryBit(yParityOrV: number) {
+  if (yParityOrV === 0 || yParityOrV === 1) {
+    return yParityOrV;
+  }
+  if (yParityOrV === 27) {
+    return 0;
+  }
+  if (yParityOrV === 28) {
+    return 1;
+  }
+  throw new Error("Invalid wallet signature");
 }
 
 export function parseUserSubject(subject: string): string {

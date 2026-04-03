@@ -1,6 +1,5 @@
-import { queryGeneric } from "convex/server";
-
-import type { QueryCtx } from "./lib/dataModel";
+import { query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import { parseUserSubject } from "./lib/walletAuth";
 
 async function getViewerUser(ctx: QueryCtx, subject: string) {
@@ -11,7 +10,7 @@ async function getViewerUser(ctx: QueryCtx, subject: string) {
   return ctx.db.get(userId);
 }
 
-export const get = queryGeneric({
+export const get = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();

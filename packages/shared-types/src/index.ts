@@ -15,6 +15,11 @@ export {
 } from "./auth";
 
 export type {
+  UserId,
+  ViewerIdentity,
+  WalletAuthSession,
+  WalletChallengeId,
+  WalletChallengeResponse,
   WalletChallengeMessageInput,
   WalletChallengePurpose,
 } from "./auth";

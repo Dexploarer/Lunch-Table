@@ -8,6 +8,7 @@
     "dev:web": "bun run --cwd apps/web dev",
     "dev:bot": "bun run --cwd apps/bot-runner dev",
     "dev:convex": "bunx convex dev",
+    "setup:convex-auth-local": "bun run scripts/setup-convex-local-auth.ts",
     "build": "bun run build:web && bun run build:bot",
     "build:web": "bun run --cwd apps/web build",
     "build:bot": "bun run --cwd apps/bot-runner build",
@@ -21,6 +22,7 @@
     "test:replay": "vitest run tests/replay-contract.test.ts"
   },
   "dependencies": {
+    "@noble/curves": "2.0.1",
     "convex": "1.34.1",
     "jose": "6.2.2",
     "viem": "2.47.6"

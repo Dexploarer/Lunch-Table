@@ -19,6 +19,10 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function requireMultilineEnv(name: string): string {
+  return requireEnv(name).replace(/\\n/g, "\n");
+}
+
 function getJwtSettings() {
   return {
     audience: requireEnv("JWT_AUDIENCE"),
@@ -31,7 +35,7 @@ function getJwtSettings() {
 async function getPrivateKey(): Promise<CryptoKey> {
   if (!cachedPrivateKeyPromise) {
     cachedPrivateKeyPromise = importPKCS8(
-      requireEnv("JWT_PRIVATE_KEY_PKCS8"),
+      requireMultilineEnv("JWT_PRIVATE_KEY_PKCS8"),
       JWT_ALGORITHM,
     );
   }

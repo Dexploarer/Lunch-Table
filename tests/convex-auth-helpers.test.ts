@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { privateKeyToAccount } from "viem/accounts";
 
 import {
   AUTH_CHAIN_ID,
@@ -8,6 +9,7 @@ import {
   normalizeEmail,
   normalizeUsername,
   parseUserSubject,
+  verifyWalletChallengeSignature,
 } from "../convex/lib/walletAuth";
 
 describe("convex wallet auth helpers", () => {
@@ -59,5 +61,39 @@ describe("convex wallet auth helpers", () => {
 
     expect(message).toContain("nonce-xyz");
     expect(message).toContain("Sign in to your Lunch-Table account.");
+  });
+
+  it("verifies a signed wallet challenge against the expected address", async () => {
+    const account = privateKeyToAccount(
+      "0x59c6995e998f97a5a0044966f0945381d1b8e75d6d6f4a5fb5e6dbf1d6bdbf14",
+    );
+    const message = buildWalletChallengeMessage({
+      address: account.address,
+      domain: "lunchtable.gg",
+      email: "wizard@example.com",
+      issuedAt: "2026-04-03T00:00:00.000Z",
+      nonce: "nonce-signature-check",
+      purpose: "login",
+      statement: "Sign in to your Lunch-Table account.",
+      uri: "https://lunchtable.gg/login",
+      username: "tablemage",
+    });
+    const signature = await account.signMessage({ message });
+
+    await expect(
+      verifyWalletChallengeSignature({
+        address: account.address,
+        message,
+        signature,
+      }),
+    ).resolves.toBe(true);
+
+    await expect(
+      verifyWalletChallengeSignature({
+        address: "0x1111111111111111111111111111111111111111",
+        message,
+        signature,
+      }),
+    ).resolves.toBe(false);
   });
 });

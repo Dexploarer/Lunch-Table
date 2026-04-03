@@ -1,7 +1,9 @@
-import { mutationGeneric } from "convex/server";
 import { v } from "convex/values";
 
-import type { MutationCtx, UserId, WalletId } from "./lib/dataModel";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { action, internalMutation, mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { issueWalletAuthToken } from "./lib/jwt";
 import {
   AUTH_CHAIN_ID,
@@ -58,8 +60,8 @@ async function recordAudit(
     failureCode?: string;
     purpose: "signup" | "login";
     success: boolean;
-    userId?: UserId;
-    walletId?: WalletId;
+    userId?: Id<"users">;
+    walletId?: Id<"wallets">;
   },
 ) {
   await ctx.db.insert("authAudits", {
@@ -71,7 +73,23 @@ async function recordAudit(
   });
 }
 
-export const requestSignupChallenge = mutationGeneric({
+interface WalletAuthCompletionRecord {
+  address: `0x${string}`;
+  chainId: typeof AUTH_CHAIN_ID;
+  email: string;
+  userId: Id<"users">;
+  username: string;
+}
+
+interface WalletAuthCompletionSession {
+  address: `0x${string}`;
+  chainId: typeof AUTH_CHAIN_ID;
+  token: string;
+  userId: Id<"users">;
+  username: string;
+}
+
+export const requestSignupChallenge = mutation({
   args: {
     address: v.string(),
     email: v.string(),
@@ -136,7 +154,7 @@ export const requestSignupChallenge = mutationGeneric({
   },
 });
 
-export const requestLoginChallenge = mutationGeneric({
+export const requestLoginChallenge = mutation({
   args: {
     address: v.string(),
   },
@@ -184,7 +202,7 @@ export const requestLoginChallenge = mutationGeneric({
   },
 });
 
-export const completeWalletSignup = mutationGeneric({
+export const completeWalletSignupTransaction = internalMutation({
   args: {
     challengeId: v.id("walletChallenges"),
     signature: v.string(),
@@ -271,24 +289,44 @@ export const completeWalletSignup = mutationGeneric({
       walletId,
     });
 
-    const token = await issueWalletAuthToken({
-      email,
-      userId,
-      username,
-      walletAddress: address,
-    });
-
     return {
       address,
       chainId: AUTH_CHAIN_ID,
-      token,
+      email,
       userId,
       username,
     };
   },
 });
 
-export const completeWalletLogin = mutationGeneric({
+export const completeWalletSignup = action({
+  args: {
+    challengeId: v.id("walletChallenges"),
+    signature: v.string(),
+  },
+  handler: async (ctx, args): Promise<WalletAuthCompletionSession> => {
+    const result: WalletAuthCompletionRecord = await ctx.runMutation(
+      internal.auth.completeWalletSignupTransaction,
+      args,
+    );
+    const token = await issueWalletAuthToken({
+      email: result.email,
+      userId: result.userId,
+      username: result.username,
+      walletAddress: result.address,
+    });
+
+    return {
+      address: result.address,
+      chainId: result.chainId,
+      token,
+      userId: result.userId,
+      username: result.username,
+    };
+  },
+});
+
+export const completeWalletLoginTransaction = internalMutation({
   args: {
     challengeId: v.id("walletChallenges"),
     signature: v.string(),
@@ -340,19 +378,39 @@ export const completeWalletLogin = mutationGeneric({
       walletId: wallet._id,
     });
 
-    const token = await issueWalletAuthToken({
-      email: user.email,
-      userId: user._id,
-      username: user.username,
-      walletAddress: address,
-    });
-
     return {
       address,
       chainId: AUTH_CHAIN_ID,
-      token,
+      email: user.email,
       userId: user._id,
       username: user.username,
+    };
+  },
+});
+
+export const completeWalletLogin = action({
+  args: {
+    challengeId: v.id("walletChallenges"),
+    signature: v.string(),
+  },
+  handler: async (ctx, args): Promise<WalletAuthCompletionSession> => {
+    const result: WalletAuthCompletionRecord = await ctx.runMutation(
+      internal.auth.completeWalletLoginTransaction,
+      args,
+    );
+    const token = await issueWalletAuthToken({
+      email: result.email,
+      userId: result.userId,
+      username: result.username,
+      walletAddress: result.address,
+    });
+
+    return {
+      address: result.address,
+      chainId: result.chainId,
+      token,
+      userId: result.userId,
+      username: result.username,
     };
   },
 });

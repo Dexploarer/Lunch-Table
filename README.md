@@ -30,8 +30,19 @@ bun run test
 ## Development
 
 ```bash
+bun install
 bun run dev:web
 bun run dev:bot
+```
+
+## Convex Local Auth
+
+Bootstrap the local wallet-auth issuer and sync those variables into the local
+Convex deployment:
+
+```bash
+bun run setup:convex-auth-local --sync
+bun run dev:convex
 ```
 
 ## Session Loop
