@@ -1,8 +1,8 @@
 # Session State
 
 **Current Phase**: Phase 1
-**Current Stage**: Implementation
-**Last Checkpoint**: none
+**Current Stage**: Verification
+**Last Checkpoint**: 2d8fae8 (2026-04-02)
 **Planning Docs**: `IMPLEMENTATION_PHASES.md`, `docs/ARCHITECTURE.md`, `docs/GAME_RULES_SPEC.md`, `docs/CONVEX_BACKEND_SPEC.md`
 
 ---
@@ -11,12 +11,12 @@
 **Type**: Infrastructure
 **Spec**: `IMPLEMENTATION_PHASES.md#phase-1-repository-bootstrap`
 **Progress**:
-- [ ] Initialize Bun workspace
-- [ ] Create `apps/web`, `apps/bot-runner`, `packages/*`, and `convex/`
-- [ ] Configure shared TypeScript paths
-- [ ] Set up lint, format, and test commands
-- [ ] Add base README and environment template
-**Next Action**: Create package.json, bunfig.toml, and tsconfig.json to establish the workspace root.
+- [x] Initialize Bun workspace
+- [x] Create `apps/web`, `apps/bot-runner`, `packages/*`, and `convex/`
+- [x] Configure shared TypeScript paths
+- [x] Set up lint, format, and test commands
+- [x] Add base README and environment template
+**Next Action**: Configure Convex and WorkOS for human auth, bot JWT auth, and the viewer bootstrap.
 **Known Issues**: None
 
 ## Phase 2: Convex Bootstrap and Auth ⏸️

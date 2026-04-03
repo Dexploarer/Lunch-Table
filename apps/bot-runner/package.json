@@ -1,0 +1,13 @@
+{
+  "name": "@lunchtable/bot-runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun"
+  },
+  "dependencies": {
+    "@lunchtable/game-core": "workspace:*",
+    "@lunchtable/shared-types": "workspace:*"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@lunchtable/game-core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lunchtable/shared-types": "workspace:*"
+  }
+}
