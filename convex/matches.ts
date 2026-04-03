@@ -8,15 +8,10 @@ import {
   validateDeckForUserCollection,
 } from "./lib/library";
 import {
-  buildPracticeMatchBundle,
+  createPersistedMatch,
   deserializeMatchShell,
   deserializeSeatView,
   deserializeSpectatorView,
-  seatFromEvent,
-  serializeMatchEvent,
-  serializeMatchShell,
-  serializeMatchState,
-  serializeMatchView,
 } from "./lib/matches";
 import { requireViewerUser } from "./lib/viewer";
 
@@ -35,27 +30,6 @@ function assertDeckOwner(deck: Doc<"decks">, userId: Id<"users">) {
   if (deck.userId !== userId) {
     throw new Error("Deck not found");
   }
-}
-
-function toMatchDocument(input: {
-  formatId: string;
-  shell: ReturnType<typeof deserializeMatchShell>;
-  updatedAt: number;
-}) {
-  return {
-    activeSeat: input.shell.activeSeat ?? undefined,
-    completedAt: input.shell.completedAt ?? undefined,
-    createdAt: input.shell.createdAt,
-    formatId: input.formatId,
-    phase: input.shell.phase,
-    shellJson: serializeMatchShell(input.shell),
-    startedAt: input.shell.startedAt ?? undefined,
-    status: input.shell.status,
-    turnNumber: input.shell.turnNumber,
-    updatedAt: input.updatedAt,
-    version: input.shell.version,
-    winnerSeat: input.shell.winnerSeat ?? undefined,
-  };
 }
 
 async function getMatchByStringId(
@@ -106,78 +80,35 @@ export const createPractice = mutation({
     }
 
     const now = Date.now();
-    const matchRef = await ctx.db.insert("matches", {
-      createdAt: now,
-      formatId: deck.formatId,
-      phase: "bootstrap",
-      shellJson: "{}",
-      status: "pending",
-      turnNumber: 0,
-      updatedAt: now,
-      version: 0,
-    });
-
     const wallet = user.primaryWalletId
       ? await ctx.db.get(user.primaryWalletId)
       : null;
-    const bundle = buildPracticeMatchBundle({
+    const bundle = await createPersistedMatch(ctx, {
       createdAt: now,
       format: getFormatDefinition(deck.formatId),
-      matchId: matchRef,
-      player: {
-        userId: user._id,
-        username: user.username,
-        walletAddress: wallet?.address ?? null,
-      },
-      primaryDeck: {
-        mainboard: deck.mainboard,
-        sideboard: deck.sideboard,
-      },
-    });
-
-    await ctx.db.patch(
-      matchRef,
-      toMatchDocument({
-        formatId: deck.formatId,
-        shell: bundle.shell,
-        updatedAt: now,
-      }),
-    );
-    await ctx.db.insert("matchStates", {
-      matchId: matchRef,
-      snapshotJson: serializeMatchState(bundle.state),
-      updatedAt: now,
-      version: bundle.shell.version,
-    });
-
-    for (const event of bundle.events) {
-      await ctx.db.insert("matchEvents", {
-        at: event.at,
-        eventJson: serializeMatchEvent(event),
-        kind: event.kind,
-        matchId: matchRef,
-        seat: seatFromEvent(event),
-        sequence: event.sequence,
-        stateVersion: event.stateVersion,
-      });
-    }
-
-    for (const view of bundle.views) {
-      await ctx.db.insert("matchViews", {
-        kind: view.kind,
-        matchId: matchRef,
-        updatedAt: now,
-        viewJson: serializeMatchView(view.view),
-        viewerSeat: view.viewerSeat,
-        viewerUserId: view.viewerUserId ?? undefined,
-      });
-    }
-
-    await ctx.db.insert("matchViews", {
-      kind: "spectator",
-      matchId: matchRef,
-      updatedAt: now,
-      viewJson: serializeMatchView(bundle.spectatorView),
+      participants: [
+        {
+          actorType: "human",
+          deck: {
+            mainboard: deck.mainboard,
+            sideboard: deck.sideboard,
+          },
+          seat: "seat-0",
+          userId: user._id,
+          username: user.username,
+          walletAddress: wallet?.address ?? null,
+        },
+        {
+          actorType: "bot",
+          deck: {
+            mainboard: deck.mainboard,
+            sideboard: deck.sideboard,
+          },
+          seat: "seat-1",
+          username: "Table Bot",
+        },
+      ],
+      status: "pending",
     });
 
     return bundle.shell;

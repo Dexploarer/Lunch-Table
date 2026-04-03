@@ -58,6 +58,56 @@ export default defineSchema({
     .index("by_user_status_updated", ["userId", "status", "updatedAt"])
     .index("by_user_updated", ["userId", "updatedAt"]),
 
+  lobbies: defineTable({
+    code: v.string(),
+    codeNormalized: v.string(),
+    createdAt: v.number(),
+    formatId: v.string(),
+    guestDeckId: v.optional(v.id("decks")),
+    guestJoinedAt: v.optional(v.number()),
+    guestReady: v.optional(v.boolean()),
+    guestUserId: v.optional(v.id("users")),
+    guestUsername: v.optional(v.string()),
+    guestWalletAddress: v.optional(v.string()),
+    hostDeckId: v.id("decks"),
+    hostReady: v.boolean(),
+    hostUserId: v.id("users"),
+    hostUsername: v.string(),
+    hostWalletAddress: v.optional(v.string()),
+    matchId: v.optional(v.id("matches")),
+    status: v.union(
+      v.literal("open"),
+      v.literal("readyCheck"),
+      v.literal("matched"),
+      v.literal("cancelled"),
+    ),
+    updatedAt: v.number(),
+  })
+    .index("by_code", ["codeNormalized"])
+    .index("by_hostUserId_and_updatedAt", ["hostUserId", "updatedAt"])
+    .index("by_guestUserId_and_updatedAt", ["guestUserId", "updatedAt"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+
+  queueEntries: defineTable({
+    createdAt: v.number(),
+    deckId: v.id("decks"),
+    formatId: v.string(),
+    kind: v.literal("casual"),
+    matchId: v.optional(v.id("matches")),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("matched"),
+      v.literal("cancelled"),
+    ),
+    updatedAt: v.number(),
+    userId: v.id("users"),
+    username: v.string(),
+    walletAddress: v.optional(v.string()),
+  })
+    .index("by_status_format_createdAt", ["status", "formatId", "createdAt"])
+    .index("by_userId_and_updatedAt", ["userId", "updatedAt"])
+    .index("by_userId_and_status", ["userId", "status"]),
+
   matches: defineTable({
     activeSeat: v.optional(v.string()),
     completedAt: v.optional(v.number()),

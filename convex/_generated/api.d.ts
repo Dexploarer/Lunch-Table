@@ -15,9 +15,12 @@ import type * as decks from "../decks.js";
 import type * as lib_jwt from "../lib/jwt.js";
 import type * as lib_library from "../lib/library.js";
 import type * as lib_matches from "../lib/matches.js";
+import type * as lib_play from "../lib/play.js";
 import type * as lib_viewer from "../lib/viewer.js";
 import type * as lib_walletAuth from "../lib/walletAuth.js";
+import type * as lobbies from "../lobbies.js";
 import type * as matches from "../matches.js";
+import type * as matchmaking from "../matchmaking.js";
 import type * as viewer from "../viewer.js";
 
 import type {
@@ -34,9 +37,12 @@ declare const fullApi: ApiFromModules<{
   "lib/jwt": typeof lib_jwt;
   "lib/library": typeof lib_library;
   "lib/matches": typeof lib_matches;
+  "lib/play": typeof lib_play;
   "lib/viewer": typeof lib_viewer;
   "lib/walletAuth": typeof lib_walletAuth;
+  lobbies: typeof lobbies;
   matches: typeof matches;
+  matchmaking: typeof matchmaking;
   viewer: typeof viewer;
 }>;
 

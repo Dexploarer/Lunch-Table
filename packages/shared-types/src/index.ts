@@ -27,6 +27,12 @@ export {
   MATCH_VICTORY_MODELS,
   MATCH_ZONE_KINDS,
 } from "./match";
+export {
+  LOBBY_SLOTS,
+  LOBBY_STATUSES,
+  QUEUE_ENTRY_STATUSES,
+  QUEUE_KINDS,
+} from "./play";
 export { MATCH_TELEMETRY_EVENT_NAMES } from "./telemetry";
 
 export type {
@@ -91,6 +97,19 @@ export type {
   StackObjectId,
   ZoneKind,
 } from "./match";
+export type {
+  LobbyId,
+  LobbyMutationResult,
+  LobbyParticipant,
+  LobbyRecord,
+  LobbySlot,
+  LobbyStatus,
+  QueueEntryId,
+  QueueEntryRecord,
+  QueueEntryStatus,
+  QueueKind,
+  QueueMutationResult,
+} from "./play";
 export type {
   MatchTelemetryEvent,
   MatchTelemetryEventName,

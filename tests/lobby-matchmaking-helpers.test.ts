@@ -1,0 +1,137 @@
+import { starterFormat } from "@lunchtable/card-content";
+import { describe, expect, it } from "vitest";
+
+import { buildPersistedMatchBundle } from "../convex/lib/matches";
+import {
+  compareQueueOrder,
+  deriveLobbyCode,
+  deriveLobbyStatus,
+  normalizeLobbyCode,
+  pickQueueOpponent,
+} from "../convex/lib/play";
+
+describe("lobby and matchmaking helpers", () => {
+  it("normalizes and derives deterministic lobby codes", () => {
+    expect(normalizeLobbyCode(" abc123 ")).toBe("ABC123");
+    expect(deriveLobbyCode("kd72qzhyek5pe2chn25z7mxyrd84572k")).toBe("KD72QZ");
+  });
+
+  it("derives lobby status from participation and match state", () => {
+    expect(
+      deriveLobbyStatus({
+        cancelled: false,
+        guestReady: undefined,
+        guestUserId: undefined,
+        hostReady: false,
+        matchId: undefined,
+      }),
+    ).toBe("open");
+    expect(
+      deriveLobbyStatus({
+        cancelled: false,
+        guestReady: false,
+        guestUserId: "guest_1",
+        hostReady: true,
+        matchId: undefined,
+      }),
+    ).toBe("readyCheck");
+    expect(
+      deriveLobbyStatus({
+        cancelled: false,
+        guestReady: true,
+        guestUserId: "guest_1",
+        hostReady: true,
+        matchId: "match_1",
+      }),
+    ).toBe("matched");
+    expect(
+      deriveLobbyStatus({
+        cancelled: true,
+        guestReady: true,
+        guestUserId: "guest_1",
+        hostReady: true,
+        matchId: "match_1",
+      }),
+    ).toBe("cancelled");
+  });
+
+  it("picks the oldest queued opponent from another user", () => {
+    const entries = [
+      {
+        _id: "entry_c",
+        createdAt: 30,
+        status: "queued",
+        userId: "user_self",
+      },
+      {
+        _id: "entry_b",
+        createdAt: 20,
+        status: "queued",
+        userId: "user_two",
+      },
+      {
+        _id: "entry_a",
+        createdAt: 20,
+        status: "queued",
+        userId: "user_one",
+      },
+    ] as never[];
+
+    expect(compareQueueOrder(entries[1], entries[2])).toBeGreaterThan(0);
+    expect(pickQueueOpponent(entries, "user_self")?._id).toBe("entry_a");
+  });
+
+  it("builds an active human mirror match bundle for ready checks and queues", () => {
+    const bundle = buildPersistedMatchBundle({
+      activeSeat: "seat-0",
+      createdAt: Date.UTC(2026, 3, 3, 12, 0, 0),
+      format: starterFormat,
+      matchId: "match_queue_1",
+      participants: [
+        {
+          actorType: "human",
+          deck: {
+            mainboard: starterFormat.cardPool.map((card) => ({
+              cardId: card.id,
+              count: starterFormat.deckRules.maxCopies,
+            })),
+            sideboard: [],
+          },
+          seat: "seat-0",
+          userId: "user_host" as never,
+          username: "host",
+          walletAddress: "0x1111111111111111111111111111111111111111",
+        },
+        {
+          actorType: "human",
+          deck: {
+            mainboard: starterFormat.cardPool.map((card) => ({
+              cardId: card.id,
+              count: starterFormat.deckRules.maxCopies,
+            })),
+            sideboard: [],
+          },
+          seat: "seat-1",
+          userId: "user_guest" as never,
+          username: "guest",
+          walletAddress: "0x2222222222222222222222222222222222222222",
+        },
+      ],
+      phase: "ready",
+      prioritySeat: "seat-0",
+      startedAt: Date.UTC(2026, 3, 3, 12, 0, 0),
+      status: "active",
+      turnNumber: 1,
+    });
+
+    expect(bundle.shell.status).toBe("active");
+    expect(bundle.shell.phase).toBe("ready");
+    expect(bundle.shell.activeSeat).toBe("seat-0");
+    expect(bundle.shell.turnNumber).toBe(1);
+    expect(bundle.views).toHaveLength(2);
+    expect(
+      bundle.views.every((view) => view.view.availableIntents.length === 3),
+    ).toBe(true);
+    expect(bundle.spectatorView.availableIntents).toHaveLength(0);
+  });
+});

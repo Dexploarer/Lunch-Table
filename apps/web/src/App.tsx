@@ -5,9 +5,11 @@ import type {
   CollectionSummary,
   DeckId,
   DeckRecord,
+  LobbyRecord,
   MatchSeatView,
   MatchShell,
   MatchSpectatorView,
+  QueueEntryRecord,
   ViewerIdentity,
 } from "@lunchtable/shared-types";
 import { APP_NAME } from "@lunchtable/shared-types";
@@ -30,6 +32,7 @@ const bootstrapChecklist = [
   "Starter collection seeded canonically",
   "Deck validation and CRUD online",
   "Match shell persistence online",
+  "Lobby and queue matchmaking online",
 ];
 
 const defaultFormatId = starterFormat.formatId;
@@ -54,6 +57,12 @@ function buildStarterDeckEntries(catalog: CardCatalogEntry[]) {
     cardId: card.cardId,
     count: starterFormat.deckRules.maxCopies,
   }));
+}
+
+function getActiveLegalDeck(decks: DeckRecord[]) {
+  return decks.find(
+    (deck) => deck.status === "active" && deck.validation.isLegal,
+  );
 }
 
 async function loadLibrarySnapshot() {
@@ -107,6 +116,22 @@ async function loadMatchSnapshot() {
     matches,
     seatView,
     spectatorView,
+  };
+}
+
+async function loadPlaySnapshot() {
+  if (!convexWalletAuthTransport) {
+    throw new Error("Convex transport unavailable");
+  }
+
+  const [lobbies, queueEntries] = await Promise.all([
+    convexWalletAuthTransport.listMyLobbies(),
+    convexWalletAuthTransport.listMyQueueEntries({}),
+  ]);
+
+  return {
+    lobbies,
+    queueEntries,
   };
 }
 
@@ -536,6 +561,240 @@ function MatchViewProofPanel({
   );
 }
 
+function LobbyPanel({
+  canCreate,
+  joinCode,
+  lobbies,
+  loading,
+  onCreate,
+  onJoin,
+  onJoinCodeChange,
+  onLeave,
+  onToggleReady,
+  pendingAction,
+  viewerId,
+}: {
+  canCreate: boolean;
+  joinCode: string;
+  lobbies: LobbyRecord[];
+  loading: boolean;
+  onCreate: () => void;
+  onJoin: () => void;
+  onJoinCodeChange: (value: string) => void;
+  onLeave: (lobbyId: LobbyRecord["id"]) => void;
+  onToggleReady: (lobbyId: LobbyRecord["id"], ready: boolean) => void;
+  pendingAction: string | null;
+  viewerId: ViewerIdentity["id"] | null;
+}) {
+  const currentLobby =
+    lobbies.find(
+      (lobby) => lobby.status === "open" || lobby.status === "readyCheck",
+    ) ??
+    lobbies[0] ??
+    null;
+  const localParticipant = currentLobby?.participants.find(
+    (participant) => participant.userId === viewerId,
+  );
+
+  return (
+    <section className="workspace-card">
+      <div className="panel-stack">
+        <div className="panel-header-row">
+          <div>
+            <p className="eyebrow">Private Challenge</p>
+            <h3>Lobby ready check</h3>
+          </div>
+          <button
+            className="action"
+            disabled={!canCreate || pendingAction !== null}
+            onClick={onCreate}
+            type="button"
+          >
+            {pendingAction === "create-lobby"
+              ? "Creating lobby..."
+              : "Create private lobby"}
+          </button>
+        </div>
+        <label className="field">
+          <span>Join with code</span>
+          <div className="inline-actions inline-actions-tight">
+            <input
+              disabled={pendingAction !== null}
+              onChange={(event) => onJoinCodeChange(event.target.value)}
+              placeholder="ABC123"
+              value={joinCode}
+            />
+            <button
+              className="action secondary-action"
+              disabled={
+                !canCreate ||
+                pendingAction !== null ||
+                joinCode.trim().length < 6
+              }
+              onClick={onJoin}
+              type="button"
+            >
+              {pendingAction === "join-lobby" ? "Joining..." : "Join"}
+            </button>
+          </div>
+        </label>
+        {loading ? (
+          <p className="support-copy">Loading private lobby state.</p>
+        ) : !currentLobby ? (
+          <p className="support-copy">
+            No active lobby yet. Create one from your first legal active deck or
+            join with an invite code.
+          </p>
+        ) : (
+          <>
+            <dl className="stats">
+              <div>
+                <dt>Code</dt>
+                <dd>{currentLobby.code}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{currentLobby.status}</dd>
+              </div>
+              <div>
+                <dt>Participants</dt>
+                <dd>{currentLobby.participants.length}</dd>
+              </div>
+            </dl>
+            <div className="deck-list">
+              {currentLobby.participants.map((participant) => (
+                <article
+                  className="deck-card"
+                  key={`${currentLobby.id}-${participant.slot}`}
+                >
+                  <p className="library-card-title">
+                    {participant.username} · {participant.slot}
+                  </p>
+                  <p className="library-card-meta">
+                    Ready: {participant.ready ? "yes" : "no"}
+                  </p>
+                  <p className="support-copy">Deck {participant.deckId}</p>
+                </article>
+              ))}
+            </div>
+            {currentLobby.matchId ? (
+              <p className="support-copy">
+                Match created: {currentLobby.matchId}
+              </p>
+            ) : localParticipant ? (
+              <div className="inline-actions">
+                <button
+                  className="action secondary-action"
+                  disabled={pendingAction !== null}
+                  onClick={() =>
+                    onToggleReady(currentLobby.id, !localParticipant.ready)
+                  }
+                  type="button"
+                >
+                  {pendingAction === `ready:${currentLobby.id}`
+                    ? "Updating..."
+                    : localParticipant.ready
+                      ? "Set not ready"
+                      : "Set ready"}
+                </button>
+                <button
+                  className="action secondary-action"
+                  disabled={pendingAction !== null}
+                  onClick={() => onLeave(currentLobby.id)}
+                  type="button"
+                >
+                  {pendingAction === `leave:${currentLobby.id}`
+                    ? "Leaving..."
+                    : "Leave lobby"}
+                </button>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function QueuePanel({
+  canQueue,
+  entries,
+  loading,
+  onDequeue,
+  onEnqueue,
+  pendingAction,
+}: {
+  canQueue: boolean;
+  entries: QueueEntryRecord[];
+  loading: boolean;
+  onDequeue: (entryId: QueueEntryRecord["id"]) => void;
+  onEnqueue: () => void;
+  pendingAction: string | null;
+}) {
+  const currentEntry =
+    entries.find((entry) => entry.status === "queued") ?? entries[0] ?? null;
+
+  return (
+    <section className="workspace-card workspace-card-dark">
+      <div className="panel-stack">
+        <div className="panel-header-row">
+          <div>
+            <p className="eyebrow">Casual Queue</p>
+            <h3>Deterministic pairing</h3>
+          </div>
+          <button
+            className="action action-contrast"
+            disabled={!canQueue || pendingAction !== null}
+            onClick={onEnqueue}
+            type="button"
+          >
+            {pendingAction === "enqueue-casual"
+              ? "Entering queue..."
+              : "Enter casual queue"}
+          </button>
+        </div>
+        {loading ? (
+          <p className="support-copy">Loading queue state.</p>
+        ) : !currentEntry ? (
+          <p className="support-copy">
+            No queue entry yet. Enter the casual queue from your first legal
+            active deck.
+          </p>
+        ) : (
+          <>
+            <dl className="stats">
+              <div>
+                <dt>Status</dt>
+                <dd>{currentEntry.status}</dd>
+              </div>
+              <div>
+                <dt>Deck</dt>
+                <dd>{currentEntry.deckId}</dd>
+              </div>
+              <div>
+                <dt>Match</dt>
+                <dd>{currentEntry.matchId ?? "pending"}</dd>
+              </div>
+            </dl>
+            {currentEntry.status === "queued" ? (
+              <button
+                className="action secondary-action"
+                disabled={pendingAction !== null}
+                onClick={() => onDequeue(currentEntry.id)}
+                type="button"
+              >
+                {pendingAction === `dequeue:${currentEntry.id}`
+                  ? "Leaving queue..."
+                  : "Leave queue"}
+              </button>
+            ) : null}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const match = createMatchSkeleton();
   const [signupEmail, setSignupEmail] = useState("");
@@ -568,7 +827,10 @@ export function App() {
   const [catalog, setCatalog] = useState<CardCatalogEntry[]>([]);
   const [collection, setCollection] = useState<CollectionSummary | null>(null);
   const [decks, setDecks] = useState<DeckRecord[]>([]);
+  const [joinLobbyCode, setJoinLobbyCode] = useState("");
+  const [lobbies, setLobbies] = useState<LobbyRecord[]>([]);
   const [matches, setMatches] = useState<MatchShell[]>([]);
+  const [queueEntries, setQueueEntries] = useState<QueueEntryRecord[]>([]);
   const [seatView, setSeatView] = useState<MatchSeatView | null>(null);
   const [spectatorView, setSpectatorView] = useState<MatchSpectatorView | null>(
     null,
@@ -576,6 +838,8 @@ export function App() {
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [matchLoading, setMatchLoading] = useState(false);
   const [deckAction, setDeckAction] = useState<string | null>(null);
+  const [playAction, setPlayAction] = useState<string | null>(null);
+  const [playLoading, setPlayLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -634,6 +898,19 @@ export function App() {
     }
   }
 
+  async function refreshMatches() {
+    const nextMatchSnapshot = await loadMatchSnapshot();
+    setMatches(nextMatchSnapshot.matches);
+    setSeatView(nextMatchSnapshot.seatView);
+    setSpectatorView(nextMatchSnapshot.spectatorView);
+  }
+
+  async function refreshPlay() {
+    const nextPlaySnapshot = await loadPlaySnapshot();
+    setLobbies(nextPlaySnapshot.lobbies);
+    setQueueEntries(nextPlaySnapshot.queueEntries);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -674,6 +951,47 @@ export function App() {
     }
 
     void syncLibrary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewer]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncPlay() {
+      if (!convexWalletAuthTransport || !viewer) {
+        setLobbies([]);
+        setQueueEntries([]);
+        return;
+      }
+
+      setPlayLoading(true);
+      try {
+        const nextPlay = await loadPlaySnapshot();
+        if (cancelled) {
+          return;
+        }
+
+        setLobbies(nextPlay.lobbies);
+        setQueueEntries(nextPlay.queueEntries);
+      } catch (error) {
+        if (!cancelled) {
+          setNotice({
+            body: getErrorMessage(error),
+            title: "Play sync failed",
+            tone: "error",
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setPlayLoading(false);
+        }
+      }
+    }
+
+    void syncPlay();
 
     return () => {
       cancelled = true;
@@ -827,7 +1145,10 @@ export function App() {
     setCatalog([]);
     setCollection(null);
     setDecks([]);
+    setJoinLobbyCode("");
+    setLobbies([]);
     setMatches([]);
+    setQueueEntries([]);
     setSeatView(null);
     setSpectatorView(null);
     setNotice({
@@ -967,9 +1288,7 @@ export function App() {
       return;
     }
 
-    const sourceDeck = decks.find(
-      (deck) => deck.status === "active" && deck.validation.isLegal,
-    );
+    const sourceDeck = getActiveLegalDeck(decks);
     if (!sourceDeck) {
       setNotice({
         body: "Create or restore at least one active legal deck before creating a match shell.",
@@ -984,10 +1303,7 @@ export function App() {
       const shell = await convexWalletAuthTransport.createPracticeMatch({
         deckId: sourceDeck.id,
       });
-      const nextMatches = await loadMatchSnapshot();
-      setMatches(nextMatches.matches);
-      setSeatView(nextMatches.seatView);
-      setSpectatorView(nextMatches.spectatorView);
+      await refreshMatches();
       setNotice({
         body: `${shell.id} persisted with seat and spectator projections.`,
         title: "Practice match created",
@@ -1004,11 +1320,220 @@ export function App() {
     }
   }
 
+  async function handleCreatePrivateLobby() {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+
+    const sourceDeck = getActiveLegalDeck(decks);
+    if (!sourceDeck) {
+      setNotice({
+        body: "Create or restore one active legal deck before creating a private lobby.",
+        title: "No legal deck available",
+        tone: "warning",
+      });
+      return;
+    }
+
+    setPlayAction("create-lobby");
+    try {
+      const result = await convexWalletAuthTransport.createPrivateLobby({
+        deckId: sourceDeck.id,
+      });
+      await refreshPlay();
+      setJoinLobbyCode(result.lobby.code);
+      setNotice({
+        body: `Share ${result.lobby.code} with another player to join the private lobby.`,
+        title: "Private lobby created",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Lobby creation failed",
+        tone: "error",
+      });
+    } finally {
+      setPlayAction(null);
+    }
+  }
+
+  async function handleJoinPrivateLobby() {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+
+    const sourceDeck = getActiveLegalDeck(decks);
+    if (!sourceDeck) {
+      setNotice({
+        body: "Create or restore one active legal deck before joining a private lobby.",
+        title: "No legal deck available",
+        tone: "warning",
+      });
+      return;
+    }
+
+    setPlayAction("join-lobby");
+    try {
+      const result = await convexWalletAuthTransport.joinPrivateLobby({
+        code: joinLobbyCode,
+        deckId: sourceDeck.id,
+      });
+      await refreshPlay();
+      setJoinLobbyCode(result.lobby.code);
+      setNotice({
+        body: `Joined lobby ${result.lobby.code}. Set your ready state once both decks are locked.`,
+        title: "Private lobby joined",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Lobby join failed",
+        tone: "error",
+      });
+    } finally {
+      setPlayAction(null);
+    }
+  }
+
+  async function handleLeaveLobby(lobbyId: LobbyRecord["id"]) {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+
+    setPlayAction(`leave:${lobbyId}`);
+    try {
+      await convexWalletAuthTransport.leaveLobby({
+        lobbyId,
+      });
+      await refreshPlay();
+      setNotice({
+        body: "The private lobby state was updated.",
+        title: "Lobby updated",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Lobby update failed",
+        tone: "error",
+      });
+    } finally {
+      setPlayAction(null);
+    }
+  }
+
+  async function handleToggleLobbyReady(
+    lobbyId: LobbyRecord["id"],
+    ready: boolean,
+  ) {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+
+    setPlayAction(`ready:${lobbyId}`);
+    try {
+      const result = await convexWalletAuthTransport.setLobbyReady({
+        lobbyId,
+        ready,
+      });
+      await refreshPlay();
+      if (result.match) {
+        await refreshMatches();
+      }
+      setNotice({
+        body: result.match
+          ? `${result.match.id} was created from the private lobby ready check.`
+          : `Lobby ${result.lobby.code} updated to ${ready ? "ready" : "not ready"}.`,
+        title: result.match ? "Private match created" : "Ready state updated",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Ready check failed",
+        tone: "error",
+      });
+    } finally {
+      setPlayAction(null);
+    }
+  }
+
+  async function handleEnqueueCasual() {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+
+    const sourceDeck = getActiveLegalDeck(decks);
+    if (!sourceDeck) {
+      setNotice({
+        body: "Create or restore one active legal deck before entering the casual queue.",
+        title: "No legal deck available",
+        tone: "warning",
+      });
+      return;
+    }
+
+    setPlayAction("enqueue-casual");
+    try {
+      const result = await convexWalletAuthTransport.enqueueCasualQueue({
+        deckId: sourceDeck.id,
+      });
+      await refreshPlay();
+      if (result.match) {
+        await refreshMatches();
+      }
+      setNotice({
+        body: result.match
+          ? `${result.match.id} was created from the casual queue.`
+          : "You are now waiting in the casual queue for another legal deck.",
+        title: result.match ? "Casual match created" : "Entered casual queue",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Queue entry failed",
+        tone: "error",
+      });
+    } finally {
+      setPlayAction(null);
+    }
+  }
+
+  async function handleDequeueCasual(entryId: QueueEntryRecord["id"]) {
+    if (!convexWalletAuthTransport) {
+      return;
+    }
+
+    setPlayAction(`dequeue:${entryId}`);
+    try {
+      await convexWalletAuthTransport.dequeueCasualQueue({
+        entryId,
+      });
+      await refreshPlay();
+      setNotice({
+        body: "The active casual queue entry was cancelled.",
+        title: "Left casual queue",
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        body: getErrorMessage(error),
+        title: "Queue exit failed",
+        tone: "error",
+      });
+    } finally {
+      setPlayAction(null);
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">Phase 7 Match Persistence</p>
+          <p className="eyebrow">Phase 8 Lobby and Matchmaking</p>
           <h1>{APP_NAME}</h1>
           <p className="lede">
             Email and username create the player record. A fresh BSC wallet is
@@ -1016,9 +1541,9 @@ export function App() {
             the private key never leaves the player’s machine.
           </p>
           <p className="support-copy">
-            This phase adds persisted match shells, cached seat projections, and
-            spectator-safe views on the same Convex identity that human users
-            and AI agents will share.
+            This phase adds private challenge lobbies, ready checks, and a
+            deterministic casual queue on the same Convex identity that human
+            users and AI agents will share.
           </p>
         </div>
         <div className="hero-metrics">
@@ -1169,9 +1694,7 @@ export function App() {
         <div className="library-grid">
           <CollectionPanel collection={collection} loading={libraryLoading} />
           <DeckPanel
-            canCreatePracticeMatch={decks.some(
-              (deck) => deck.status === "active" && deck.validation.isLegal,
-            )}
+            canCreatePracticeMatch={Boolean(getActiveLegalDeck(decks))}
             canCreateStarterDeck={Boolean(viewer && catalog.length > 0)}
             decks={decks}
             loading={libraryLoading}
@@ -1180,6 +1703,43 @@ export function App() {
             onCreatePracticeMatch={handleCreatePracticeMatch}
             onCreateStarterDeck={handleCreateStarterDeck}
             pendingAction={deckAction}
+          />
+        </div>
+      </section>
+
+      <section className="panel panel-secondary">
+        <div className="workspace-header">
+          <div>
+            <p className="eyebrow">Play Surface</p>
+            <h2>Private lobbies and casual queue</h2>
+          </div>
+          <p className="support-copy">
+            Private lobbies use invite codes and ready checks. The casual queue
+            rejects duplicate active entries and deterministically pairs the
+            oldest compatible players.
+          </p>
+        </div>
+        <div className="library-grid">
+          <LobbyPanel
+            canCreate={Boolean(viewer && getActiveLegalDeck(decks))}
+            joinCode={joinLobbyCode}
+            lobbies={lobbies}
+            loading={playLoading}
+            onCreate={handleCreatePrivateLobby}
+            onJoin={handleJoinPrivateLobby}
+            onJoinCodeChange={setJoinLobbyCode}
+            onLeave={handleLeaveLobby}
+            onToggleReady={handleToggleLobbyReady}
+            pendingAction={playAction}
+            viewerId={viewer?.id ?? null}
+          />
+          <QueuePanel
+            canQueue={Boolean(viewer && getActiveLegalDeck(decks))}
+            entries={queueEntries}
+            loading={playLoading}
+            onDequeue={handleDequeueCasual}
+            onEnqueue={handleEnqueueCasual}
+            pendingAction={playAction}
           />
         </div>
       </section>

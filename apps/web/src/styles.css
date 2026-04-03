@@ -445,6 +445,15 @@ h3 {
   flex-wrap: wrap;
 }
 
+.inline-actions-tight {
+  align-items: center;
+}
+
+.inline-actions-tight input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
 .issue-list {
   margin: 0 0 1rem;
   padding-left: 1.25rem;

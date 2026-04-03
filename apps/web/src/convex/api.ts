@@ -6,10 +6,15 @@ import type {
   DeckRecord,
   DeckStatus,
   DeckValidationResult,
+  LobbyMutationResult,
+  LobbyRecord,
   MatchSeatView,
   MatchShell,
   MatchSpectatorView,
   MatchStatus,
+  QueueEntryId,
+  QueueEntryRecord,
+  QueueMutationResult,
   ViewerIdentity,
   WalletAuthSession,
   WalletChallengeId,
@@ -43,6 +48,9 @@ export interface WalletLibraryTransport extends WalletAuthTransport {
   archiveDeck(args: {
     deckId: DeckId;
   }): Promise<DeckRecord>;
+  createPrivateLobby(args: {
+    deckId: DeckId;
+  }): Promise<LobbyMutationResult>;
   cloneDeck(args: {
     deckId: DeckId;
     name?: string;
@@ -56,9 +64,15 @@ export interface WalletLibraryTransport extends WalletAuthTransport {
   createPracticeMatch(args: {
     deckId: DeckId;
   }): Promise<MatchShell>;
+  dequeueCasualQueue(args: {
+    entryId: QueueEntryId;
+  }): Promise<QueueMutationResult>;
   getCollectionSummary(args: {
     formatId: string;
   }): Promise<CollectionSummary>;
+  getLobbyByCode(args: {
+    code: string;
+  }): Promise<LobbyRecord | null>;
   getMatchShell(args: {
     matchId: string;
   }): Promise<MatchShell | null>;
@@ -68,6 +82,10 @@ export interface WalletLibraryTransport extends WalletAuthTransport {
   getSpectatorView(args: {
     matchId: string;
   }): Promise<MatchSpectatorView | null>;
+  joinPrivateLobby(args: {
+    code: string;
+    deckId: DeckId;
+  }): Promise<LobbyMutationResult>;
   listCatalog(args: {
     formatId: string;
   }): Promise<CardCatalogEntry[]>;
@@ -75,14 +93,28 @@ export interface WalletLibraryTransport extends WalletAuthTransport {
     formatId?: string;
     status?: DeckStatus;
   }): Promise<DeckRecord[]>;
+  listMyLobbies(): Promise<LobbyRecord[]>;
   listMyMatches(args: {
     status?: MatchStatus;
   }): Promise<MatchShell[]>;
+  listMyQueueEntries(args: {
+    status?: "cancelled" | "matched" | "queued";
+  }): Promise<QueueEntryRecord[]>;
+  enqueueCasualQueue(args: {
+    deckId: DeckId;
+  }): Promise<QueueMutationResult>;
+  leaveLobby(args: {
+    lobbyId: LobbyRecord["id"];
+  }): Promise<LobbyMutationResult>;
   validateDeck(args: {
     formatId: string;
     mainboard: DeckCardEntry[];
     sideboard: DeckCardEntry[];
   }): Promise<DeckValidationResult>;
+  setLobbyReady(args: {
+    lobbyId: LobbyRecord["id"];
+    ready: boolean;
+  }): Promise<LobbyMutationResult>;
 }
 
 export function createConvexWalletAuthTransport(
@@ -91,6 +123,12 @@ export function createConvexWalletAuthTransport(
   return {
     archiveDeck(args) {
       return client.mutation(api.decks.archive, args) as Promise<DeckRecord>;
+    },
+    createPrivateLobby(args) {
+      return client.mutation(
+        api.lobbies.createPrivate,
+        args,
+      ) as Promise<LobbyMutationResult>;
     },
     cloneDeck(args) {
       return client.mutation(api.decks.clone, args) as Promise<DeckRecord>;
@@ -116,11 +154,23 @@ export function createConvexWalletAuthTransport(
         args,
       ) as Promise<MatchShell>;
     },
+    dequeueCasualQueue(args) {
+      return client.mutation(
+        api.matchmaking.dequeue,
+        args,
+      ) as Promise<QueueMutationResult>;
+    },
     getCollectionSummary(args) {
       return client.query(
         api.collections.getSummary,
         args,
       ) as Promise<CollectionSummary>;
+    },
+    getLobbyByCode(args) {
+      return client.query(
+        api.lobbies.getByCode,
+        args,
+      ) as Promise<LobbyRecord | null>;
     },
     getMatchShell(args) {
       return client.query(
@@ -140,6 +190,12 @@ export function createConvexWalletAuthTransport(
         args,
       ) as Promise<MatchSpectatorView | null>;
     },
+    joinPrivateLobby(args) {
+      return client.mutation(
+        api.lobbies.join,
+        args,
+      ) as Promise<LobbyMutationResult>;
+    },
     getViewer() {
       return client.query(api.viewer.get, {}) as Promise<ViewerIdentity | null>;
     },
@@ -151,10 +207,30 @@ export function createConvexWalletAuthTransport(
     listDecks(args) {
       return client.query(api.decks.list, args) as Promise<DeckRecord[]>;
     },
+    listMyLobbies() {
+      return client.query(api.lobbies.listMine, {}) as Promise<LobbyRecord[]>;
+    },
     listMyMatches(args) {
       return client.query(api.matches.listMyMatches, args) as Promise<
         MatchShell[]
       >;
+    },
+    listMyQueueEntries(args) {
+      return client.query(api.matchmaking.listMine, args) as Promise<
+        QueueEntryRecord[]
+      >;
+    },
+    enqueueCasualQueue(args) {
+      return client.mutation(
+        api.matchmaking.enqueue,
+        args,
+      ) as Promise<QueueMutationResult>;
+    },
+    leaveLobby(args) {
+      return client.mutation(
+        api.lobbies.leave,
+        args,
+      ) as Promise<LobbyMutationResult>;
     },
     requestLoginChallenge(args) {
       return client.mutation(
@@ -167,6 +243,12 @@ export function createConvexWalletAuthTransport(
         api.auth.requestSignupChallenge,
         args,
       ) as Promise<WalletChallengeResponse>;
+    },
+    setLobbyReady(args) {
+      return client.mutation(
+        api.lobbies.setReady,
+        args,
+      ) as Promise<LobbyMutationResult>;
     },
     validateDeck(args) {
       return client.query(
