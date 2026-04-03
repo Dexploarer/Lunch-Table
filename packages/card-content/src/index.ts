@@ -1,4 +1,3 @@
-export const starterFormat = {
-  id: "standard-alpha",
-  name: "Standard Alpha",
-} as const;
+export { starterCards } from "./cards";
+export { starterFormat } from "./formats";
+export { starterKeywordRegistry } from "./keywords";

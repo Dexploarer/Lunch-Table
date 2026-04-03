@@ -26,3 +26,32 @@ export type {
 
 export type { MatchTransition } from "./reducer";
 export type { ReplayResult } from "./engine";
+
+export type {
+  ActivatedAbility,
+  CardAbility,
+  CardDefinition,
+  CardKind,
+  CardRarity,
+  CompiledCardDefinition,
+  ConditionNode,
+  ContinuousEffectNode,
+  ContinuousLayer,
+  CostSpec,
+  EffectNode,
+  EventPattern,
+  FormatDefinition,
+  FormatDeckRules,
+  FormatUiHints,
+  KeywordDefinition,
+  KeywordRegistry,
+  ReplacementAbility,
+  ReplacementNode,
+  StaticAbility,
+  TargetSpec,
+  TriggeredAbility,
+  TriggerSpec,
+  ValidationFailure,
+  ValidationResult,
+  ValidationSuccess,
+} from "./dsl";
