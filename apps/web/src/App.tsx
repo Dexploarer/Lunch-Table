@@ -8,6 +8,8 @@ import type {
   LobbyRecord,
   MatchShell,
   QueueEntryRecord,
+  ReplayFrame,
+  ReplaySummary,
   ViewerIdentity,
 } from "@lunchtable/shared-types";
 import { APP_NAME } from "@lunchtable/shared-types";
@@ -23,6 +25,7 @@ import {
   storeAuthToken,
 } from "./auth";
 import { MatchShell as LiveMatchShell } from "./components/match/MatchShell";
+import { ReplayPlayer } from "./components/replay/ReplayPlayer";
 import { convexWalletAuthTransport, syncConvexAuth } from "./convex/client";
 
 const bootstrapChecklist = [
@@ -94,6 +97,34 @@ async function loadMatchSnapshot() {
   }
 
   return convexWalletAuthTransport.listMyMatches({});
+}
+
+async function loadReplaySnapshot(matchId: string) {
+  if (!convexWalletAuthTransport) {
+    throw new Error("Convex transport unavailable");
+  }
+
+  const summary = await convexWalletAuthTransport.getReplaySummary({
+    matchId,
+  });
+
+  if (!summary) {
+    return {
+      frames: [],
+      summary: null,
+    };
+  }
+
+  const frameSlice = await convexWalletAuthTransport.getReplayFrames({
+    limit: summary.totalFrames,
+    matchId,
+    start: 0,
+  });
+
+  return {
+    frames: frameSlice.frames,
+    summary,
+  };
 }
 
 async function loadPlaySnapshot() {
@@ -428,11 +459,13 @@ function MatchShellPanel({
   loading,
   matches,
   onSelectMatch,
+  replaySummary,
   selectedMatchId,
 }: {
   loading: boolean;
   matches: MatchShell[];
   onSelectMatch: (matchId: string) => void;
+  replaySummary: ReplaySummary | null;
   selectedMatchId: string | null;
 }) {
   return (
@@ -468,6 +501,12 @@ function MatchShellPanel({
                     </div>
                     <strong>{match.seats.length} seats</strong>
                   </div>
+                  {selectedMatchId === match.id && replaySummary ? (
+                    <p className="support-copy">
+                      Replay frames: {replaySummary.totalFrames} ·{" "}
+                      {replaySummary.status}
+                    </p>
+                  ) : null}
                   <button
                     className="action secondary-action"
                     onClick={() => onSelectMatch(match.id)}
@@ -758,8 +797,13 @@ export function App() {
   const [matches, setMatches] = useState<MatchShell[]>([]);
   const [queueEntries, setQueueEntries] = useState<QueueEntryRecord[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [replayFrames, setReplayFrames] = useState<ReplayFrame[]>([]);
+  const [replaySummary, setReplaySummary] = useState<ReplaySummary | null>(
+    null,
+  );
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [matchLoading, setMatchLoading] = useState(false);
+  const [replayLoading, setReplayLoading] = useState(false);
   const [deckAction, setDeckAction] = useState<string | null>(null);
   const [playAction, setPlayAction] = useState<string | null>(null);
   const [playLoading, setPlayLoading] = useState(false);
@@ -973,6 +1017,47 @@ export function App() {
 
     setSelectedMatchId(matches[0]?.id ?? null);
   }, [matches, selectedMatchId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncReplay() {
+      if (!convexWalletAuthTransport || !selectedMatchId) {
+        setReplayFrames([]);
+        setReplaySummary(null);
+        return;
+      }
+
+      setReplayLoading(true);
+      try {
+        const nextReplay = await loadReplaySnapshot(selectedMatchId);
+        if (cancelled) {
+          return;
+        }
+
+        setReplayFrames(nextReplay.frames);
+        setReplaySummary(nextReplay.summary);
+      } catch (error) {
+        if (!cancelled) {
+          setNotice({
+            body: getErrorMessage(error),
+            title: "Replay sync failed",
+            tone: "error",
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setReplayLoading(false);
+        }
+      }
+    }
+
+    void syncReplay();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMatchId]);
 
   async function handleSignupSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1468,7 +1553,7 @@ export function App() {
     <main className="app-shell">
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">Phase 12 Match UI Shell</p>
+          <p className="eyebrow">Phase 14 Replay And Spectator Mode</p>
           <h1>{APP_NAME}</h1>
           <p className="lede">
             Email and username create the player record. A fresh BSC wallet is
@@ -1476,9 +1561,9 @@ export function App() {
             the private key never leaves the player’s machine.
           </p>
           <p className="support-copy">
-            This phase mounts the live match shell: hand, battlefield, stack,
-            prompt rail, event log, timers, and seat-versus-spectator isolation
-            on top of the same Convex match state humans and AI agents share.
+            This phase adds spectator-safe replay capture on top of the live
+            match shell, so completed matches can be stepped through using the
+            same authoritative event log and cached public board projections.
           </p>
         </div>
         <div className="hero-metrics">
@@ -1493,8 +1578,12 @@ export function App() {
             <strong>{starterFormat.name}</strong>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Live shell</span>
-            <strong>{selectedMatchId ? "Mounted" : "Awaiting match"}</strong>
+            <span className="metric-label">Replay</span>
+            <strong>
+              {replaySummary
+                ? `${replaySummary.totalFrames} frames`
+                : "Awaiting match"}
+            </strong>
           </div>
         </div>
       </section>
@@ -1696,6 +1785,7 @@ export function App() {
             loading={matchLoading}
             matches={matches}
             onSelectMatch={setSelectedMatchId}
+            replaySummary={replaySummary}
             selectedMatchId={selectedMatchId}
           />
           {convexWalletAuthTransport ? (
@@ -1720,6 +1810,25 @@ export function App() {
             </section>
           )}
         </div>
+      </section>
+
+      <section className="panel panel-secondary">
+        <div className="workspace-header">
+          <div>
+            <p className="eyebrow">Replay Frames</p>
+            <h2>Spectator-safe deterministic playback</h2>
+          </div>
+          <p className="support-copy">
+            Replay capture stores public frame checkpoints only. The player
+            below reuses the Pixi board renderer and never receives seat-private
+            hand contents.
+          </p>
+        </div>
+        <ReplayPlayer
+          frames={replayFrames}
+          loading={replayLoading}
+          summary={replaySummary}
+        />
       </section>
 
       <section className="panel panel-secondary">

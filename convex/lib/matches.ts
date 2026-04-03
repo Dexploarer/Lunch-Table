@@ -29,6 +29,7 @@ import type {
 } from "@lunchtable/shared-types";
 
 import type { MutationCtx } from "../_generated/server";
+import { createReplayFrame, serializeReplayFrames } from "./replays";
 
 export interface PracticeMatchBundleInput {
   createdAt: number;
@@ -526,6 +527,28 @@ export async function createPersistedMatch(
     matchId: matchRef,
     updatedAt: input.createdAt,
     viewJson: serializeMatchView(bundle.spectatorView),
+  });
+
+  const initialReplayFrame = createReplayFrame({
+    event: bundle.events[0] ?? null,
+    fallbackLabel: "Match created",
+    frameIndex: 0,
+    recordedAt: input.createdAt,
+    view: bundle.spectatorView,
+  });
+
+  await ctx.db.insert("replays", {
+    completedAt: bundle.shell.completedAt ?? undefined,
+    createdAt: input.createdAt,
+    formatId: input.format.formatId,
+    framesJson: serializeReplayFrames([initialReplayFrame]),
+    lastEventSequence: initialReplayFrame.eventSequence,
+    matchId: matchRef,
+    ownerUserId: input.participants[0]?.userId ?? undefined,
+    status: bundle.shell.status,
+    totalFrames: 1,
+    updatedAt: input.createdAt,
+    winnerSeat: bundle.shell.winnerSeat ?? undefined,
   });
 
   return bundle;

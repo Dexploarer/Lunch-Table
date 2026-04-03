@@ -16,6 +16,9 @@ import type {
   QueueEntryId,
   QueueEntryRecord,
   QueueMutationResult,
+  ReplayFrame,
+  ReplayFrameSlice,
+  ReplaySummary,
   ViewerIdentity,
   WalletAuthSession,
   WalletChallengeId,
@@ -173,6 +176,14 @@ export interface WalletLibraryTransport extends WalletAuthTransport {
   getSpectatorView(args: {
     matchId: string;
   }): Promise<MatchSpectatorView | null>;
+  getReplayFrames(args: {
+    limit?: number;
+    matchId: string;
+    start?: number;
+  }): Promise<ReplayFrameSlice>;
+  getReplaySummary(args: {
+    matchId: string;
+  }): Promise<ReplaySummary | null>;
   joinPrivateLobby(args: {
     code: string;
     deckId: DeckId;
@@ -283,6 +294,18 @@ export function createConvexWalletAuthTransport(
         api.matches.getSpectatorView,
         args,
       ) as Promise<MatchSpectatorView | null>;
+    },
+    getReplayFrames(args) {
+      return client.query(
+        api.replays.getFrames,
+        args,
+      ) as Promise<ReplayFrameSlice>;
+    },
+    getReplaySummary(args) {
+      return client.query(
+        api.replays.getSummary,
+        args,
+      ) as Promise<ReplaySummary | null>;
     },
     joinPrivateLobby(args) {
       return client.mutation(

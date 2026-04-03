@@ -190,6 +190,27 @@ export default defineSchema({
     ])
     .index("by_viewerUserId_and_updatedAt", ["viewerUserId", "updatedAt"]),
 
+  replays: defineTable({
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    formatId: v.string(),
+    framesJson: v.string(),
+    lastEventSequence: v.number(),
+    matchId: v.id("matches"),
+    ownerUserId: v.optional(v.id("users")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("active"),
+      v.literal("complete"),
+      v.literal("cancelled"),
+    ),
+    totalFrames: v.number(),
+    updatedAt: v.number(),
+    winnerSeat: v.optional(v.string()),
+  })
+    .index("by_matchId", ["matchId"])
+    .index("by_ownerUserId_and_createdAt", ["ownerUserId", "createdAt"]),
+
   walletChallenges: defineTable({
     address: v.string(),
     addressNormalized: v.string(),

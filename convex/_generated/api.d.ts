@@ -17,11 +17,13 @@ import type * as lib_library from "../lib/library.js";
 import type * as lib_matches from "../lib/matches.js";
 import type * as lib_participation from "../lib/participation.js";
 import type * as lib_play from "../lib/play.js";
+import type * as lib_replays from "../lib/replays.js";
 import type * as lib_viewer from "../lib/viewer.js";
 import type * as lib_walletAuth from "../lib/walletAuth.js";
 import type * as lobbies from "../lobbies.js";
 import type * as matches from "../matches.js";
 import type * as matchmaking from "../matchmaking.js";
+import type * as replays from "../replays.js";
 import type * as viewer from "../viewer.js";
 
 import type {
@@ -40,11 +42,13 @@ declare const fullApi: ApiFromModules<{
   "lib/matches": typeof lib_matches;
   "lib/participation": typeof lib_participation;
   "lib/play": typeof lib_play;
+  "lib/replays": typeof lib_replays;
   "lib/viewer": typeof lib_viewer;
   "lib/walletAuth": typeof lib_walletAuth;
   lobbies: typeof lobbies;
   matches: typeof matches;
   matchmaking: typeof matchmaking;
+  replays: typeof replays;
   viewer: typeof viewer;
 }>;
 

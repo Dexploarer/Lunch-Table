@@ -24,6 +24,14 @@ import {
   serializeMatchView,
 } from "./lib/matches";
 import { assertUserCanEnterPlaySurface } from "./lib/participation";
+import {
+  appendReplayFrame,
+  buildReplaySummary,
+  createReplayFrame,
+  deserializeReplayFrames,
+  selectReplayAnchorEvent,
+  serializeReplayFrames,
+} from "./lib/replays";
 import { requireViewerUser } from "./lib/viewer";
 
 const gameplaySeatValidator = v.union(v.literal("seat-0"), v.literal("seat-1"));
@@ -199,6 +207,16 @@ async function getSpectatorViewDoc(
     .withIndex("by_matchId_and_kind", (query) =>
       query.eq("matchId", matchId).eq("kind", "spectator"),
     )
+    .unique();
+}
+
+async function getReplayDoc(
+  ctx: Pick<MutationCtx, "db">,
+  matchId: Id<"matches">,
+) {
+  return ctx.db
+    .query("replays")
+    .withIndex("by_matchId", (query) => query.eq("matchId", matchId))
     .unique();
 }
 
@@ -433,6 +451,70 @@ export const submitIntent = mutation({
         matchId,
         updatedAt: now,
         viewJson: serializeMatchView(result.spectatorView),
+      });
+    }
+
+    const replayDoc = await getReplayDoc(ctx, matchId);
+    const replayFrame = createReplayFrame({
+      event: selectReplayAnchorEvent(result.appendedEvents),
+      fallbackLabel: "Match checkpoint updated",
+      frameIndex: replayDoc?.totalFrames ?? 0,
+      recordedAt: now,
+      view: result.spectatorView,
+    });
+
+    if (replayDoc) {
+      const nextFrames = appendReplayFrame(
+        deserializeReplayFrames(replayDoc.framesJson),
+        replayFrame,
+      );
+
+      const replaySummary = buildReplaySummary({
+        completedAt: result.shell.completedAt ?? null,
+        createdAt: replayDoc.createdAt,
+        formatId: replayDoc.formatId,
+        frames: nextFrames,
+        matchId: result.shell.id,
+        ownerUserId: replayDoc.ownerUserId ?? null,
+        status: result.shell.status,
+        updatedAt: now,
+        winnerSeat: result.shell.winnerSeat ?? null,
+      });
+
+      await ctx.db.patch(replayDoc._id, {
+        completedAt: replaySummary.completedAt ?? undefined,
+        framesJson: serializeReplayFrames(nextFrames),
+        lastEventSequence: replaySummary.lastEventSequence,
+        status: replaySummary.status,
+        totalFrames: replaySummary.totalFrames,
+        updatedAt: replaySummary.updatedAt,
+        winnerSeat: replaySummary.winnerSeat ?? undefined,
+      });
+    } else {
+      const replaySummary = buildReplaySummary({
+        completedAt: result.shell.completedAt ?? null,
+        createdAt: now,
+        formatId: match.formatId,
+        frames: [replayFrame],
+        matchId: result.shell.id,
+        ownerUserId: user._id,
+        status: result.shell.status,
+        updatedAt: now,
+        winnerSeat: result.shell.winnerSeat ?? null,
+      });
+
+      await ctx.db.insert("replays", {
+        completedAt: replaySummary.completedAt ?? undefined,
+        createdAt: replaySummary.createdAt,
+        formatId: replaySummary.formatId,
+        framesJson: serializeReplayFrames([replayFrame]),
+        lastEventSequence: replaySummary.lastEventSequence,
+        matchId,
+        ownerUserId: replaySummary.ownerUserId ?? undefined,
+        status: replaySummary.status,
+        totalFrames: replaySummary.totalFrames,
+        updatedAt: replaySummary.updatedAt,
+        winnerSeat: replaySummary.winnerSeat ?? undefined,
       });
     }
 

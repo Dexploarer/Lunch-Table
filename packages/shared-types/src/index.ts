@@ -111,6 +111,11 @@ export type {
   QueueMutationResult,
 } from "./play";
 export type {
+  ReplayFrame,
+  ReplayFrameSlice,
+  ReplaySummary,
+} from "./replay";
+export type {
   MatchTelemetryEvent,
   MatchTelemetryEventName,
 } from "./telemetry";
