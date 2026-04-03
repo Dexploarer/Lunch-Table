@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
+import { describe, expect, it } from "vitest";
 
 import {
   AUTH_CHAIN_ID,

@@ -2,9 +2,9 @@ import type { WalletAuthTransport } from "../apps/web/src/convex/api";
 
 import {
   BSC_CHAIN_ID,
-  buildWalletChallengeMessage,
   type UserId,
   type WalletChallengeId,
+  buildWalletChallengeMessage,
 } from "@lunchtable/shared-types";
 import { describe, expect, it } from "vitest";
 

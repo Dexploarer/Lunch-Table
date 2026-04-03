@@ -7,6 +7,7 @@
     "build": "bun build src/index.ts --outdir dist --target bun"
   },
   "dependencies": {
+    "@lunchtable/bot-sdk": "workspace:*",
     "@lunchtable/game-core": "workspace:*",
     "@lunchtable/shared-types": "workspace:*"
   }
