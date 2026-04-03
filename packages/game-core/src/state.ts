@@ -16,9 +16,14 @@ import type {
   ActivatedAbility,
   CardAbility,
   CardKind,
+  ContinuousEffectNode,
+  ContinuousLayer,
   EffectNode,
+  ReplacementAbility,
+  StaticAbility,
   TriggeredAbility,
 } from "./dsl";
+import { CONTINUOUS_LAYERS } from "./dsl";
 
 export interface MatchRandomState {
   cursor: number;
@@ -92,6 +97,7 @@ export interface MatchSeatState {
   battlefield: CardInstanceId[];
   command: CardInstanceId[];
   deck: CardInstanceId[];
+  exile: CardInstanceId[];
   graveyard: CardInstanceId[];
   hand: CardInstanceId[];
   lifeTotal: number;
@@ -117,6 +123,16 @@ export interface MatchState {
   seats: Record<SeatId, MatchSeatState>;
   shell: MatchShell;
   stack: MatchStackObjectState[];
+}
+
+export interface DerivedBattlefieldCardState {
+  annotations: string[];
+  controllerSeat: SeatId;
+  instanceId: CardInstanceId;
+  keywords: string[];
+  permissions: string[];
+  power: number | null;
+  toughness: number | null;
 }
 
 export interface CreateMatchStateOptions {
@@ -173,6 +189,7 @@ function createSeatState(
     battlefield: [],
     command: [],
     deck: [],
+    exile: [],
     graveyard: [],
     hand: [],
     lifeTotal: 20,
@@ -299,4 +316,135 @@ export function deriveDeterministicNumber(
     seed: random.seed,
   };
   return [(hash >>> 0) / 4294967295, nextRandom];
+}
+
+export function isReplacementAbility(
+  ability: CardAbility,
+): ability is ReplacementAbility {
+  return ability.kind === "replacement";
+}
+
+export function isStaticAbility(
+  ability: CardAbility,
+): ability is StaticAbility {
+  return ability.kind === "static";
+}
+
+function cardIdFromInstanceId(instanceId: string) {
+  const [, cardId] = instanceId.split(":");
+  return cardId ?? instanceId;
+}
+
+function getAffectedBattlefieldInstances(
+  state: MatchState,
+  sourceInstanceId: CardInstanceId,
+  controllerSeat: SeatId,
+  effect: ContinuousEffectNode,
+) {
+  if (effect.target === "self") {
+    return [sourceInstanceId];
+  }
+
+  return state.seats[controllerSeat].battlefield.filter(
+    (instanceId) => instanceId !== sourceInstanceId,
+  );
+}
+
+function createBaseDerivedBattlefieldState(
+  state: MatchState,
+): Record<CardInstanceId, DerivedBattlefieldCardState> {
+  const entries: Record<CardInstanceId, DerivedBattlefieldCardState> = {};
+
+  for (const seat of Object.values(state.seats)) {
+    for (const instanceId of seat.battlefield) {
+      const card = state.cardCatalog[cardIdFromInstanceId(instanceId)];
+      entries[instanceId] = {
+        annotations: [],
+        controllerSeat: seat.seat,
+        instanceId,
+        keywords: [...(card?.keywords ?? [])],
+        permissions: [],
+        power: card?.stats?.power ?? null,
+        toughness: card?.stats?.toughness ?? null,
+      };
+    }
+  }
+
+  return entries;
+}
+
+function applyContinuousEffect(
+  derived: Record<CardInstanceId, DerivedBattlefieldCardState>,
+  effect: ContinuousEffectNode,
+  targets: CardInstanceId[],
+) {
+  for (const instanceId of targets) {
+    const entry = derived[instanceId];
+    if (!entry) {
+      continue;
+    }
+
+    if (effect.kind === "modifyStats") {
+      entry.power = (entry.power ?? 0) + (effect.modifier.power ?? 0);
+      entry.toughness =
+        (entry.toughness ?? 0) + (effect.modifier.toughness ?? 0);
+      continue;
+    }
+
+    if (effect.kind === "grantKeyword") {
+      if (!entry.keywords.includes(effect.keywordId)) {
+        entry.keywords.push(effect.keywordId);
+      }
+      continue;
+    }
+
+    if (!entry.permissions.includes(effect.permission)) {
+      entry.permissions.push(effect.permission);
+    }
+  }
+}
+
+export function deriveBattlefieldCardStates(
+  state: MatchState,
+): Record<CardInstanceId, DerivedBattlefieldCardState> {
+  const derived = createBaseDerivedBattlefieldState(state);
+
+  for (const layer of CONTINUOUS_LAYERS) {
+    for (const seat of Object.values(state.seats)) {
+      for (const instanceId of seat.battlefield) {
+        const card = state.cardCatalog[cardIdFromInstanceId(instanceId)];
+        if (!card) {
+          continue;
+        }
+
+        for (const ability of card.abilities) {
+          if (!isStaticAbility(ability) || ability.layer !== layer) {
+            continue;
+          }
+
+          const targets = getAffectedBattlefieldInstances(
+            state,
+            instanceId,
+            seat.seat,
+            ability.effect,
+          );
+          applyContinuousEffect(derived, ability.effect, targets);
+        }
+      }
+    }
+  }
+
+  return derived;
+}
+
+export function listReplacementAbilities(
+  state: MatchState,
+  instanceId: CardInstanceId,
+) {
+  const card = state.cardCatalog[cardIdFromInstanceId(instanceId)];
+  if (!card) {
+    return [];
+  }
+
+  return card.abilities.filter(isReplacementAbility);
 }

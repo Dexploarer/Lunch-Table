@@ -478,6 +478,194 @@ describe("applyGameplayIntent", () => {
     );
   });
 
+  it("applies state-based cleanup after a continuous stat buff source leaves play", () => {
+    const state = keepBothOpeningHands();
+    state.cardCatalog = {
+      "anchor-captain": {
+        abilities: [
+          {
+            effect: {
+              kind: "modifyStats",
+              modifier: {
+                toughness: 1,
+              },
+              target: "friendlyUnits",
+            },
+            id: "anchor-line",
+            kind: "static",
+            layer: "statModifiers",
+            text: "Other friendly units get +0/+1.",
+          },
+        ],
+        cardId: "anchor-captain",
+        cost: 3,
+        kind: "unit",
+        keywords: [],
+        name: "Anchor Captain",
+        stats: {
+          power: 2,
+          toughness: 4,
+        },
+      },
+      "fragile-apprentice": {
+        abilities: [],
+        cardId: "fragile-apprentice",
+        cost: 1,
+        kind: "unit",
+        keywords: [],
+        name: "Fragile Apprentice",
+        stats: {
+          power: 1,
+          toughness: 0,
+        },
+      },
+    };
+    state.seats["seat-0"].battlefield = [
+      "seat-0:anchor-captain:battlefield:1",
+      "seat-0:fragile-apprentice:battlefield:1",
+    ];
+    state.stack = [
+      {
+        abilityId: "self-destruct",
+        cardId: "anchor-captain",
+        controllerSeat: "seat-0",
+        destinationZone: null,
+        effects: [
+          {
+            kind: "destroy",
+            target: "self",
+          },
+        ],
+        kind: "activatedAbility",
+        label: "Anchor Captain self-destruct",
+        originZone: "battlefield",
+        sourceInstanceId: "seat-0:anchor-captain:battlefield:1",
+        stackId: "stack_cleanup_001",
+        status: "pending",
+        targetIds: [],
+      },
+    ];
+    state.shell.prioritySeat = "seat-0";
+
+    const firstPass = applyGameplayIntent(state, {
+      intentId: "intent_cleanup_pass_001",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-0",
+      stateVersion: state.shell.version,
+    });
+    const secondPass = applyGameplayIntent(firstPass.nextState, {
+      intentId: "intent_cleanup_pass_002",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-1",
+      stateVersion: firstPass.nextState.shell.version,
+    });
+
+    expect(secondPass.events.map((event) => event.kind)).toEqual([
+      "priorityPassed",
+      "stackObjectResolved",
+      "cardMoved",
+      "cardMoved",
+    ]);
+    expect(secondPass.nextState.seats["seat-0"]?.battlefield).toEqual([]);
+    expect(secondPass.nextState.seats["seat-0"]?.graveyard).toEqual([
+      "seat-0:anchor-captain:battlefield:1",
+      "seat-0:fragile-apprentice:battlefield:1",
+    ]);
+  });
+
+  it("uses replacement effects to move destroyed units to exile instead of the graveyard", () => {
+    const state = keepBothOpeningHands();
+    state.cardCatalog = {
+      "reborn-sentinel": {
+        abilities: [
+          {
+            id: "reborn-shroud",
+            kind: "replacement",
+            replace: {
+              destination: "exile",
+              kind: "moveInstead",
+            },
+            text: "If this would be destroyed, exile it instead.",
+            watches: {
+              event: "selfWouldBeDestroyed",
+              kind: "event",
+            },
+          },
+        ],
+        cardId: "reborn-sentinel",
+        cost: 2,
+        kind: "unit",
+        keywords: [],
+        name: "Reborn Sentinel",
+        stats: {
+          power: 2,
+          toughness: 2,
+        },
+      },
+    };
+    state.seats["seat-0"].battlefield = [
+      "seat-0:reborn-sentinel:battlefield:1",
+    ];
+    state.stack = [
+      {
+        abilityId: "self-destruct",
+        cardId: "reborn-sentinel",
+        controllerSeat: "seat-0",
+        destinationZone: null,
+        effects: [
+          {
+            kind: "destroy",
+            target: "self",
+          },
+        ],
+        kind: "activatedAbility",
+        label: "Reborn Sentinel self-destruct",
+        originZone: "battlefield",
+        sourceInstanceId: "seat-0:reborn-sentinel:battlefield:1",
+        stackId: "stack_replacement_001",
+        status: "pending",
+        targetIds: [],
+      },
+    ];
+    state.shell.prioritySeat = "seat-0";
+
+    const firstPass = applyGameplayIntent(state, {
+      intentId: "intent_replacement_pass_001",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-0",
+      stateVersion: state.shell.version,
+    });
+    const secondPass = applyGameplayIntent(firstPass.nextState, {
+      intentId: "intent_replacement_pass_002",
+      kind: "passPriority",
+      matchId: state.shell.id,
+      payload: {},
+      seat: "seat-1",
+      stateVersion: firstPass.nextState.shell.version,
+    });
+
+    expect(secondPass.events.map((event) => event.kind)).toEqual([
+      "priorityPassed",
+      "stackObjectResolved",
+      "cardMoved",
+    ]);
+    expect(secondPass.nextState.seats["seat-0"]?.battlefield).toEqual([]);
+    expect(secondPass.nextState.seats["seat-0"]?.graveyard).toEqual([]);
+    expect(secondPass.nextState.seats["seat-0"]?.exile).toEqual([
+      "seat-0:reborn-sentinel:battlefield:1",
+    ]);
+    expect(secondPass.events[2]?.kind).toBe("cardMoved");
+    if (secondPass.events[2]?.kind === "cardMoved") {
+      expect(secondPass.events[2].payload.toZone).toBe("exile");
+    }
+  });
+
   it("rejects card play from a seat without priority", () => {
     const state = keepBothOpeningHands();
 

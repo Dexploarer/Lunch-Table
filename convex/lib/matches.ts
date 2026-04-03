@@ -1,5 +1,6 @@
 import {
   applyGameplayIntent,
+  compileCardDefinition,
   createGameState,
   createMatchShellFromState,
   createSeatView,
@@ -187,8 +188,12 @@ function createPromptOpenedEvent(
 function buildCardCatalog(format: FormatDefinition): MatchState["cardCatalog"] {
   return Object.fromEntries(
     format.cardPool.map((card) => {
+      const compiled = compileCardDefinition(card, format.keywordRegistry);
+      if (!compiled.ok) {
+        throw new Error(compiled.errors.join(", "));
+      }
       const entry: MatchCardCatalogEntry = {
-        abilities: card.abilities,
+        abilities: compiled.value.abilities,
         cardId: card.id,
         cost: card.cost,
         kind: card.kind,

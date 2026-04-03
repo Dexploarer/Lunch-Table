@@ -62,4 +62,33 @@ describe("match persistence helpers", () => {
     expect(spectatorDeck?.cards).toHaveLength(0);
     expect(spectatorDeck?.cardCount).toBe(48);
   });
+
+  it("compiles keyword-generated abilities into the persisted runtime card catalog", () => {
+    const bundle = buildPracticeMatchBundle({
+      createdAt: 123,
+      format: starterFormat,
+      matchId: "match_123",
+      player: {
+        userId: "user_123" as UserId,
+        username: "tablemage",
+        walletAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      },
+      primaryDeck: starterDeck,
+    });
+
+    const flyingScout = bundle.state.cardCatalog["sky-patrol-scout"];
+    const wardUnit = bundle.state.cardCatalog["mirror-warden"];
+
+    expect(
+      flyingScout?.abilities.some(
+        (ability) => ability.kind === "static" && ability.id.endsWith(":haste"),
+      ),
+    ).toBe(true);
+    expect(
+      wardUnit?.abilities.some(
+        (ability) =>
+          ability.kind === "replacement" && ability.id.endsWith(":ward1"),
+      ),
+    ).toBe(true);
+  });
 });

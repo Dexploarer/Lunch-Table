@@ -13,6 +13,7 @@ import type {
   ZoneKind,
 } from "@lunchtable/shared-types";
 
+import { deriveBattlefieldCardStates } from "./state";
 import type { MatchState } from "./state";
 
 const PRIVATE_ZONE_KINDS = new Set<ZoneKind>(["deck", "hand", "sideboard"]);
@@ -55,23 +56,32 @@ function createCardView(
 ): MatchCardView {
   const cardId = cardIdFromInstanceId(instanceId);
   const card = state.cardCatalog[cardId];
+  const derivedState =
+    zone === "battlefield"
+      ? deriveBattlefieldCardStates(state)[instanceId]
+      : null;
   return {
-    annotations: [],
+    annotations: [...(derivedState?.annotations ?? [])],
     cardId,
     controllerSeat: seat,
     counters: {},
     instanceId,
     isTapped: false,
-    keywords: [...(card?.keywords ?? [])],
+    keywords: [...(derivedState?.keywords ?? card?.keywords ?? [])],
     name: card?.name ?? cardId,
     ownerSeat: seat,
     slotId: null,
-    statLine: card?.stats
+    statLine: derivedState
       ? {
-          power: card.stats.power,
-          toughness: card.stats.toughness,
+          power: derivedState.power,
+          toughness: derivedState.toughness,
         }
-      : null,
+      : card?.stats
+        ? {
+            power: card.stats.power,
+            toughness: card.stats.toughness,
+          }
+        : null,
     visibility,
     zone,
   };
@@ -269,6 +279,8 @@ function getZoneInstances(state: MatchState["seats"][SeatId], zone: ZoneKind) {
       return state.command;
     case "deck":
       return state.deck;
+    case "exile":
+      return state.exile;
     case "graveyard":
       return state.graveyard;
     case "hand":
@@ -318,13 +330,7 @@ function createZoneViews(
       }
 
       if (zone === "exile") {
-        zones.push({
-          cards: [],
-          cardCount: 0,
-          ownerSeat: null,
-          visibility: "public",
-          zone,
-        });
+        zones.push(createPublicZoneView(state, seat.seat, zone, seat.exile));
       }
     }
   }

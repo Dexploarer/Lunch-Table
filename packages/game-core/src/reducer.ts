@@ -9,9 +9,11 @@ import type {
 import {
   type MatchState,
   createMatchShellFromState,
+  deriveBattlefieldCardStates,
   deriveDeterministicNumber,
   isActivatedAbility,
   isTriggeredAbility,
+  listReplacementAbilities,
 } from "./state";
 
 export interface MatchTransition {
@@ -117,6 +119,8 @@ function getZoneReference(
       return seat.command;
     case "deck":
       return seat.deck;
+    case "exile":
+      return seat.exile;
     case "graveyard":
       return seat.graveyard;
     case "hand":
@@ -230,11 +234,14 @@ function hasUnsupportedEffects(
 ) {
   return effects.some((effect) => {
     switch (effect.kind) {
+      case "destroy":
+        return false;
       case "drawCards":
       case "adjustResource":
       case "dealDamage":
-      case "setAutoPass":
         return effect.target === "target";
+      case "setAutoPass":
+        return false;
       default:
         return true;
     }
@@ -323,12 +330,113 @@ function applyLifeTotalCheck(
   ];
 }
 
+function moveBattlefieldCard(
+  state: MatchState,
+  createEvent: ReturnType<typeof createEventFactory>,
+  input: {
+    instanceId: string;
+    publicReason: string;
+    toZone: "exile" | "graveyard";
+  },
+) {
+  for (const seatId of getSeatIds(state)) {
+    const battlefield = state.seats[seatId]?.battlefield;
+    if (!battlefield) {
+      continue;
+    }
+
+    const cardIndex = battlefield.indexOf(input.instanceId);
+    if (cardIndex === -1) {
+      continue;
+    }
+
+    const destinationZone = getZoneReference(state.seats[seatId], input.toZone);
+    if (!destinationZone) {
+      return [] as MatchEvent[];
+    }
+
+    battlefield.splice(cardIndex, 1);
+    destinationZone.push(input.instanceId);
+    return [
+      createEvent("cardMoved", {
+        cardInstanceId: input.instanceId,
+        fromZone: "battlefield",
+        publicReason: input.publicReason,
+        toZone: input.toZone,
+      }),
+    ];
+  }
+
+  return [] as MatchEvent[];
+}
+
+function getDestroyDestination(
+  state: MatchState,
+  instanceId: string,
+): "exile" | "graveyard" {
+  const isDestroyDestination = (
+    destination: string,
+  ): destination is "exile" | "graveyard" =>
+    destination === "exile" || destination === "graveyard";
+
+  const replacement = listReplacementAbilities(state, instanceId).find(
+    (ability) =>
+      ability.watches.kind === "event" &&
+      ability.watches.event === "selfWouldBeDestroyed" &&
+      ability.replace.kind === "moveInstead" &&
+      isDestroyDestination(ability.replace.destination),
+  );
+
+  if (
+    replacement?.replace.kind === "moveInstead" &&
+    isDestroyDestination(replacement.replace.destination)
+  ) {
+    return replacement.replace.destination;
+  }
+
+  return "graveyard";
+}
+
+function applyStateBasedActions(
+  state: MatchState,
+  createEvent: ReturnType<typeof createEventFactory>,
+) {
+  const events: MatchEvent[] = [];
+
+  while (true) {
+    const derivedBattlefield = deriveBattlefieldCardStates(state);
+    const doomedInstanceIds = Object.values(derivedBattlefield)
+      .filter(
+        (cardState) => cardState.toughness !== null && cardState.toughness <= 0,
+      )
+      .map((cardState) => cardState.instanceId);
+
+    if (doomedInstanceIds.length === 0) {
+      break;
+    }
+
+    for (const instanceId of doomedInstanceIds) {
+      events.push(
+        ...moveBattlefieldCard(state, createEvent, {
+          instanceId,
+          publicReason: "stateBasedAction",
+          toZone: getDestroyDestination(state, instanceId),
+        }),
+      );
+    }
+  }
+
+  return events;
+}
+
 function applyEffectSequence(
   state: MatchState,
   createEvent: ReturnType<typeof createEventFactory>,
   input: {
     controllerSeat: SeatId;
     effects: MatchState["stack"][number]["effects"];
+    sourceInstanceId: string | null;
+    targetIds: string[];
   },
 ) {
   const events: MatchEvent[] = [];
@@ -382,6 +490,26 @@ function applyEffectSequence(
           }),
         );
         events.push(...applyLifeTotalCheck(state, createEvent));
+      }
+      continue;
+    }
+
+    if (effect.kind === "destroy") {
+      const targetIds =
+        effect.target === "self"
+          ? input.sourceInstanceId
+            ? [input.sourceInstanceId]
+            : []
+          : input.targetIds;
+
+      for (const targetId of targetIds) {
+        events.push(
+          ...moveBattlefieldCard(state, createEvent, {
+            instanceId: targetId,
+            publicReason: "destroyed",
+            toZone: getDestroyDestination(state, targetId),
+          }),
+        );
       }
       continue;
     }
@@ -499,9 +627,13 @@ function resolveTopOfStack(
       ...applyEffectSequence(state, createEvent, {
         controllerSeat: stackObject.controllerSeat,
         effects: stackObject.effects,
+        sourceInstanceId: stackObject.sourceInstanceId,
+        targetIds: stackObject.targetIds,
       }),
     );
   }
+
+  events.push(...applyStateBasedActions(state, createEvent));
 
   state.shell.prioritySeat = state.shell.activeSeat;
   state.lastPriorityPassSeat = null;
@@ -547,6 +679,7 @@ function cloneState(state: MatchState): MatchState {
           battlefield: [...seatState.battlefield],
           command: [...seatState.command],
           deck: [...seatState.deck],
+          exile: [...seatState.exile],
           graveyard: [...seatState.graveyard],
           hand: [...seatState.hand],
           objective: [...seatState.objective],
