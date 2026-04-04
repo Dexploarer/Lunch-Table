@@ -75,3 +75,13 @@ Use the phase loop scripts to work through `IMPLEMENTATION_PHASES.md`:
 ./scripts/phase-check.sh full
 ./scripts/phase-loop.sh --status "In Progress" --summary "..." --next "..."
 ```
+
+## Release Proof
+
+Run the release-ready gate sequence and local Convex bootstrap in one command:
+
+```bash
+bun run release:proof
+```
+
+The full release handoff is documented in [docs/RELEASE.md](docs/RELEASE.md).
