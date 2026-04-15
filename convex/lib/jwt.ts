@@ -1,11 +1,9 @@
+import type { JWK } from "jose";
 import { SignJWT, importPKCS8 } from "jose";
 
-const JWT_ALGORITHM = "ES256" as const;
+import { isJsonObject, parseJsonWithGuard } from "./domainGuards";
 
-interface PublicJwk {
-  [key: string]: unknown;
-  kid?: string;
-}
+const JWT_ALGORITHM = "ES256" as const;
 
 interface ActorAuthTokenInput {
   actorType: "bot" | "human";
@@ -48,21 +46,24 @@ async function getPrivateKey(): Promise<CryptoKey> {
   return cachedPrivateKeyPromise;
 }
 
+function isPublicJwk(value: unknown): value is JWK {
+  return isJsonObject(value) && typeof value.kty === "string";
+}
+
 export function buildJwksDataUri(): string {
   const settings = getJwtSettings();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(settings.publicJwkJson);
-  } catch {
-    throw new Error("JWT public JWK must be a JSON object");
-  }
-  if (!isPublicJwk(parsed)) {
-    throw new Error("JWT public JWK must be a JSON object");
-  }
-  const jwk = parsed;
-  if (settings.keyId && !jwk.kid) {
-    jwk.kid = settings.keyId;
-  }
+  const parsedJwk = parseJsonWithGuard(
+    settings.publicJwkJson,
+    isPublicJwk,
+    "JWT public JWK",
+  );
+  const jwk =
+    settings.keyId && !parsedJwk.kid
+      ? {
+          ...parsedJwk,
+          kid: settings.keyId,
+        }
+      : parsedJwk;
   return `data:application/json,${encodeURIComponent(
     JSON.stringify({ keys: [jwk] }),
   )}`;
@@ -106,8 +107,4 @@ export async function issueWalletAuthToken(
     ...input,
     actorType: "human",
   });
-}
-
-function isPublicJwk(value: unknown): value is PublicJwk {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -10,48 +10,52 @@ import {
   selectReplayAnchorEvent,
 } from "../convex/lib/replays";
 import replayGolden from "./fixtures/replay-golden.standard-alpha.json";
+import { buildStarterDeck } from "./helpers/starterDeck";
+
+function requireFirstEvent() {
+  const bundle = buildPersistedMatchBundle({
+    activeSeat: "seat-0",
+    createdAt: Date.UTC(2026, 3, 3, 12, 0, 0),
+    format: starterFormat,
+    matchId: "match_replay_golden",
+    participants: [
+      {
+        actorType: "human",
+        deck: buildStarterDeck(),
+        seat: "seat-0",
+        userId: "user_host" as never,
+        username: "host",
+        walletAddress: "0x1111111111111111111111111111111111111111",
+      },
+      {
+        actorType: "human",
+        deck: buildStarterDeck(),
+        seat: "seat-1",
+        userId: "user_guest" as never,
+        username: "guest",
+        walletAddress: "0x2222222222222222222222222222222222222222",
+      },
+    ],
+    startedAt: Date.UTC(2026, 3, 3, 12, 0, 0),
+    status: "active",
+    turnNumber: 1,
+  });
+  const event = bundle.events[0];
+  if (!event) {
+    throw new Error(
+      "Expected replay golden bundle to contain an initial event.",
+    );
+  }
+
+  return {
+    bundle,
+    event,
+  };
+}
 
 describe("replay golden", () => {
   it("matches the stable spectator-frame sequence for the standard alpha opening", () => {
-    const bundle = buildPersistedMatchBundle({
-      activeSeat: "seat-0",
-      createdAt: Date.UTC(2026, 3, 3, 12, 0, 0),
-      format: starterFormat,
-      matchId: "match_replay_golden",
-      participants: [
-        {
-          actorType: "human",
-          deck: {
-            mainboard: starterFormat.cardPool.map((card) => ({
-              cardId: card.id,
-              count: starterFormat.deckRules.maxCopies,
-            })),
-            sideboard: [],
-          },
-          seat: "seat-0",
-          userId: "user_host" as never,
-          username: "host",
-          walletAddress: "0x1111111111111111111111111111111111111111",
-        },
-        {
-          actorType: "human",
-          deck: {
-            mainboard: starterFormat.cardPool.map((card) => ({
-              cardId: card.id,
-              count: starterFormat.deckRules.maxCopies,
-            })),
-            sideboard: [],
-          },
-          seat: "seat-1",
-          userId: "user_guest" as never,
-          username: "guest",
-          walletAddress: "0x2222222222222222222222222222222222222222",
-        },
-      ],
-      startedAt: Date.UTC(2026, 3, 3, 12, 0, 0),
-      status: "active",
-      turnNumber: 1,
-    });
+    const { bundle, event } = requireFirstEvent();
 
     const keepSeat0 = buildPersistedIntentResult({
       events: bundle.events,

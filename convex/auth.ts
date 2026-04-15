@@ -1,3 +1,8 @@
+import type {
+  WalletAuthSession,
+  WalletChallengePurpose,
+  WalletChallengeResponse,
+} from "@lunchtable/shared-types";
 import { v } from "convex/values";
 
 import type { WalletAuthSession } from "@lunchtable/shared-types";
@@ -62,7 +67,7 @@ async function recordAudit(
   ctx: MutationCtx,
   input: {
     failureCode?: string;
-    purpose: "signup" | "login";
+    purpose: Extract<WalletChallengePurpose, "signup" | "login">;
     success: boolean;
     userId?: Id<"users">;
     walletId?: Id<"wallets">;
@@ -91,7 +96,7 @@ export const requestSignupChallenge = mutation({
     email: v.string(),
     username: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<WalletChallengeResponse> => {
     const emailNormalized = normalizeEmail(args.email);
     const usernameNormalized = normalizeUsername(args.username);
     const address = normalizeAddress(args.address);
@@ -154,7 +159,7 @@ export const requestLoginChallenge = mutation({
   args: {
     address: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<WalletChallengeResponse> => {
     const address = normalizeAddress(args.address);
     const wallet = await findWalletByAddress(ctx, address.toLowerCase());
 

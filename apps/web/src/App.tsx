@@ -34,11 +34,11 @@ import { AgentLabPanel } from "./components/agents/AgentLabPanel";
 import { MatchShell as LiveMatchShell } from "./components/match/MatchShell";
 import { ReplayPlayer } from "./components/replay/ReplayPlayer";
 import {
-  convexWalletAuthTransport,
-  requireConvexWalletAuthTransport,
-  syncConvexAuth,
-} from "./convex/client";
-import { getErrorMessage } from "./errors";
+  StatusBanner,
+  type StatusNotice,
+  getErrorMessage,
+} from "./components/shared";
+import { convexWalletAuthTransport, requireConvexWalletAuthTransport, syncConvexAuth } from "./convex/client";
 
 const bootstrapChecklist = [
   "Bun workspace configured",
@@ -52,14 +52,7 @@ const bootstrapChecklist = [
 ];
 
 const defaultFormatId = starterFormat.formatId;
-
-type NoticeTone = "error" | "neutral" | "success" | "warning";
-
-interface Notice {
-  body: string;
-  title: string;
-  tone: NoticeTone;
-}
+type Notice = StatusNotice;
 
 function buildStarterDeckEntries(catalog: CardCatalogEntry[]) {
   return catalog.map((card) => ({
@@ -67,6 +60,7 @@ function buildStarterDeckEntries(catalog: CardCatalogEntry[]) {
     count: starterFormat.deckRules.maxCopies,
   }));
 }
+
 
 function getActiveLegalDeck(decks: DeckRecord[]) {
   return decks.find(
@@ -181,19 +175,6 @@ function summarizeValidation(deck: DeckRecord) {
   return `${errorCount} error${errorCount === 1 ? "" : "s"}, ${warningCount} warning${
     warningCount === 1 ? "" : "s"
   }`;
-}
-
-function StatusBanner({ notice }: { notice: Notice | null }) {
-  if (!notice) {
-    return null;
-  }
-
-  return (
-    <output className={`status-banner status-banner-${notice.tone}`}>
-      <p className="status-title">{notice.title}</p>
-      <p className="status-body">{notice.body}</p>
-    </output>
-  );
 }
 
 function SessionPanel({

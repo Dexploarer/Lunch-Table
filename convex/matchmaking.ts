@@ -98,19 +98,16 @@ async function assertLegalDeckForUser(
   }
 }
 
-async function getWalletAddress(
+async function cancelQueueEntry(
   ctx: {
-    db: {
-      get: (id: Id<"wallets">) => Promise<Doc<"wallets"> | null>;
-    };
+    db: DatabaseWriter;
   },
-  walletId: Id<"wallets"> | undefined,
+  entryId: Id<"queueEntries">,
 ) {
-  if (!walletId) {
-    return null;
-  }
-  const wallet = await ctx.db.get(walletId);
-  return wallet?.address ?? null;
+  await ctx.db.patch(entryId, {
+    status: "cancelled",
+    updatedAt: Date.now(),
+  });
 }
 
 async function getPlayableDeckForUser(
@@ -130,6 +127,21 @@ async function getPlayableDeckForUser(
   }
 
   return deck;
+}
+
+async function getWalletAddress(
+  ctx: {
+    db: {
+      get: (id: Id<"wallets">) => Promise<Doc<"wallets"> | null>;
+    };
+  },
+  walletId: Id<"wallets"> | undefined,
+) {
+  if (!walletId) {
+    return null;
+  }
+  const wallet = await ctx.db.get(walletId);
+  return wallet?.address ?? null;
 }
 
 function toQueueResult(
@@ -229,19 +241,13 @@ export const enqueue = mutation({
       userId: opponentEntry.userId,
     });
     if (!opponentDeck) {
-      await ctx.db.patch(opponentEntry._id, {
-        status: "cancelled",
-        updatedAt: Date.now(),
-      });
+      await cancelQueueEntry(ctx, opponentEntry._id);
       return toQueueResult(currentEntry, null);
     }
     if (
       await hasBlockingMatchmakingParticipation(ctx.db, opponentEntry.userId)
     ) {
-      await ctx.db.patch(opponentEntry._id, {
-        status: "cancelled",
-        updatedAt: Date.now(),
-      });
+      await cancelQueueEntry(ctx, opponentEntry._id);
       return toQueueResult(currentEntry, null);
     }
 
@@ -251,10 +257,7 @@ export const enqueue = mutation({
       username: opponentEntry.username,
     });
     if (!opponentValidation.isLegal) {
-      await ctx.db.patch(opponentEntry._id, {
-        status: "cancelled",
-        updatedAt: Date.now(),
-      });
+      await cancelQueueEntry(ctx, opponentEntry._id);
       return toQueueResult(currentEntry, null);
     }
 

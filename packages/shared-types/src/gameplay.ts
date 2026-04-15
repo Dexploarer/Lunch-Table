@@ -11,6 +11,7 @@ import type {
   ZoneKind,
 } from "./match";
 
+
 export interface GameplayIntentBase<
   TKind extends GameplayIntentKind,
   TPayload,

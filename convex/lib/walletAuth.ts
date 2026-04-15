@@ -1,8 +1,14 @@
+import {
+  BSC_CHAIN_ID,
+  type WalletChallengeMessageInput,
+  type WalletChallengePurpose,
+  buildWalletChallengeMessage as buildSharedWalletChallengeMessage,
+} from "@lunchtable/shared-types";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex, hashMessage, hexToBytes, isAddressEqual } from "viem";
 import { publicKeyToAddress } from "viem/accounts";
 
-export const AUTH_CHAIN_ID = 56 as const;
+export const AUTH_CHAIN_ID = BSC_CHAIN_ID;
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
 const EMAIL_RE =
@@ -13,16 +19,10 @@ const SIGNATURE_RE = /^0x[a-fA-F0-9]{130}$/;
 
 type HexString = `0x${string}`;
 
-export interface WalletChallengeRecordInput {
-  address: `0x${string}`;
-  domain: string;
-  email?: string;
+export interface WalletChallengeRecordInput
+  extends Omit<WalletChallengeMessageInput, "issuedAt" | "nonce"> {
   now?: number;
-  purpose: "signup" | "login" | "link-wallet";
-  requestId?: string;
-  statement: string;
-  uri: string;
-  username?: string;
+  purpose: WalletChallengePurpose;
 }
 
 export interface WalletChallengeRecord {
@@ -77,26 +77,7 @@ export function createChallengeNonce(bytes = 16): string {
   ).join("");
 }
 
-export function buildWalletChallengeMessage(
-  input: WalletChallengeRecordInput & { issuedAt: string; nonce: string },
-): string {
-  return [
-    `${input.domain} wants you to sign in with your BSC account:`,
-    input.address,
-    "",
-    input.statement,
-    input.username ? `Username: ${input.username}` : undefined,
-    input.email ? `Email: ${input.email}` : undefined,
-    `URI: ${input.uri}`,
-    "Version: 1",
-    `Chain ID: ${AUTH_CHAIN_ID}`,
-    `Nonce: ${input.nonce}`,
-    `Issued At: ${input.issuedAt}`,
-    input.requestId ? `Request ID: ${input.requestId}` : undefined,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
+export const buildWalletChallengeMessage = buildSharedWalletChallengeMessage;
 
 export function createWalletChallengeRecord(
   input: WalletChallengeRecordInput,
@@ -106,10 +87,15 @@ export function createWalletChallengeRecord(
   const issuedAt = new Date(now).toISOString();
   const address = normalizeAddress(input.address);
   const message = buildWalletChallengeMessage({
-    ...input,
     address,
+    domain: input.domain,
+    email: input.email,
     issuedAt,
     nonce,
+    requestId: input.requestId,
+    statement: input.statement,
+    uri: input.uri,
+    username: input.username,
   });
 
   return {

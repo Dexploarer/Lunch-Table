@@ -6,6 +6,7 @@ import {
 
 import type { Doc } from "../_generated/dataModel";
 import type { DatabaseReader, DatabaseWriter } from "../_generated/server";
+import { isMatchTelemetryEventName } from "./domainGuards";
 
 export async function recordTelemetryEvent(
   db: DatabaseWriter,
@@ -25,8 +26,8 @@ export async function recordTelemetryEvent(
 function toTelemetryEvent(
   doc: Doc<"telemetryEvents">,
 ): MatchTelemetryEvent<MatchTelemetryEventName> {
-  if (!isTelemetryEventName(doc.name)) {
-    throw new Error(`Unexpected telemetry event name: ${doc.name}`);
+  if (!isMatchTelemetryEventName(doc.name)) {
+    throw new Error(`Invalid telemetry event name: ${doc.name}`);
   }
 
   return {
@@ -45,7 +46,7 @@ export async function listRecentTelemetryEvents(
   input: {
     limit: number;
     matchId?: string;
-    name?: MatchTelemetryEventName;
+    name?: string;
   },
 ) {
   const limit = Math.min(Math.max(input.limit, 1), 100);
