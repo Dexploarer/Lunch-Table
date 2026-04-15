@@ -1,8 +1,9 @@
-import type {
-  CardCatalogEntry,
-  MatchPromptChoiceView,
-  MatchShell as MatchShellRecord,
-  MatchView,
+import {
+  type CardCatalogEntry,
+  type MatchPromptChoiceView,
+  type MatchShell as MatchShellRecord,
+  type MatchView,
+  assertMatchSeatId,
 } from "@lunchtable/shared-types";
 import { Suspense, useEffect, useState } from "react";
 
@@ -11,6 +12,7 @@ import type {
   SubmitIntentResult,
   WalletLibraryTransport,
 } from "../../convex/api";
+import { getErrorMessage } from "../../errors";
 import { useSeatView } from "../../hooks/useSeatView";
 import { StatusBanner, type StatusNotice, getErrorMessage } from "../shared";
 import { LazyBoardCanvas } from "./LazyBoardCanvas";
@@ -28,14 +30,6 @@ function createIntentId(kind: SubmitIntent["kind"]) {
   return `${kind}:${Date.now().toString(36)}:${Math.random()
     .toString(36)
     .slice(2, 8)}`;
-}
-
-function toGameplaySeat(seat: string): "seat-0" | "seat-1" {
-  if (seat !== "seat-0" && seat !== "seat-1") {
-    throw new Error(`Unsupported gameplay seat: ${seat}`);
-  }
-
-  return seat;
 }
 
 function formatDeadline(timestamp: number | null) {
@@ -69,7 +63,7 @@ function buildPromptIntent(input: {
   choice: MatchPromptChoiceView;
   view: Extract<MatchView, { kind: "seat" }>;
 }): SubmitIntent | null {
-  const seat = toGameplaySeat(input.view.viewerSeat);
+  const seat = assertMatchSeatId(input.view.viewerSeat);
 
   if (input.view.prompt?.kind !== "mulligan") {
     return null;
@@ -179,7 +173,7 @@ export function MatchShell({
     spectatorView,
   });
   const gameplaySeat =
-    view?.kind === "seat" ? toGameplaySeat(view.viewerSeat) : null;
+    view?.kind === "seat" ? assertMatchSeatId(view.viewerSeat) : null;
 
   useEffect(() => {
     if (!seatView && spectatorView && preferredMode === "seat") {
