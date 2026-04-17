@@ -12,13 +12,17 @@ import type {
 import { ConvexClient, ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../../convex/_generated/api";
-import { createDecisionPlanner, loadDecisionPolicyConfig } from "./policy";
+import {
+  type DecisionPolicyConfig,
+  createDecisionPlanner,
+  loadDecisionPolicyConfig,
+} from "./policy";
 import { shouldRefreshSeatViewAfterSubmit } from "./refresh";
 
 interface RunnerConfig {
   botSlug: string;
   convexUrl: string;
-  policyKey: string;
+  policyConfig: DecisionPolicyConfig;
   runnerSecret: string;
 }
 
@@ -58,7 +62,7 @@ function loadConfig(): RunnerConfig {
   return {
     botSlug,
     convexUrl,
-    policyKey: policyConfig.key,
+    policyConfig,
     runnerSecret: requireEnv("BOT_RUNNER_SECRET"),
   };
 }
@@ -68,12 +72,11 @@ class BotRunner {
     null;
   private readonly client: ConvexClient;
   private readonly httpClient: ConvexHttpClient;
-  private readonly planner = createDecisionPlanner(
-    loadDecisionPolicyConfig(process.env),
-  );
+  private readonly planner: ReturnType<typeof createDecisionPlanner>;
   private readonly watchers = new Map<BotAssignmentId, AssignmentWatcher>();
 
   constructor(private readonly config: RunnerConfig) {
+    this.planner = createDecisionPlanner(config.policyConfig);
     this.client = new ConvexClient(config.convexUrl, {
       logger: false,
       verbose: false,
@@ -87,7 +90,7 @@ class BotRunner {
     const session = await (async () => {
       try {
         return await this.httpClient.action(api.agents.issueBotSession, {
-          policyKey: this.config.policyKey,
+          policyKey: this.config.policyConfig.key,
           runnerSecret: this.config.runnerSecret,
           slug: this.config.botSlug,
         });

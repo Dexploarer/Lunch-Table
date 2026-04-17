@@ -113,11 +113,13 @@ export function resolveExternalDecisionResponse(input: {
     throw new Error("External agent returned an unknown actionId");
   }
 
+  const rawConfidence = parsed.confidence;
   const confidence =
-    typeof parsed.confidence === "number" &&
-    parsed.confidence >= 0 &&
-    parsed.confidence <= 1
-      ? parsed.confidence
+    typeof rawConfidence === "number" &&
+    Number.isFinite(rawConfidence) &&
+    rawConfidence >= 0 &&
+    rawConfidence <= 1
+      ? rawConfidence
       : 0.5;
 
   return {

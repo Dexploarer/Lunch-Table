@@ -105,9 +105,9 @@ function parseExternalDecisionBody(body: string): BotExternalDecisionResponse {
     };
   } catch (error) {
     if (error instanceof SyntaxError) {
-      return {
-        actionId: trimmed,
-      };
+      throw new Error(
+        `External decision endpoint returned non-JSON body: ${trimmed.slice(0, 200)}`,
+      );
     }
     throw error;
   }

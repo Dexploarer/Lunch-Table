@@ -303,6 +303,27 @@ describe("bot foundation helpers", () => {
       seat: "seat-1",
     });
 
+    expect(
+      resolveExternalDecisionResponse({
+        frame,
+        response: {
+          actionId: null,
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      resolveExternalDecisionResponse({
+        frame,
+        response: topAction.actionId,
+      }),
+    ).toEqual({
+      confidence: 0.5,
+      intent: topAction.intent,
+      requestedAt: frame.receivedAt,
+      seat: "seat-1",
+    });
+
     expect(() =>
       resolveExternalDecisionResponse({
         frame,

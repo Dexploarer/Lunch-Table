@@ -109,4 +109,23 @@ describe("bot runner policy selection", () => {
     expect(plan?.intent.kind).toBe("passPriority");
     expect(plan?.confidence).toBe(0.88);
   });
+
+  it("surfaces non-JSON external responses as endpoint errors", async () => {
+    const frame = createDecisionFrame({
+      catalog: createCatalogEntriesForFormat(starterFormat),
+      receivedAt: Date.UTC(2026, 3, 3, 12, 2, 0),
+      view: createPrioritySeatView(),
+    });
+    const planner = createDecisionPlanner(
+      loadDecisionPolicyConfig({
+        BOT_EXTERNAL_DECISION_URL: "https://milady.local/decide",
+        BOT_POLICY_MODE: "external-http",
+      }),
+      vi.fn(async () => new Response("not-json", { status: 200 })),
+    );
+
+    await expect(planner.decide(frame)).rejects.toThrow(
+      "External decision endpoint returned non-JSON body: not-json",
+    );
+  });
 });

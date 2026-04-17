@@ -86,13 +86,14 @@ function createSeatView(): MatchSeatView {
 }
 
 function createSpectatorView(): MatchSpectatorView {
+  const seatView = createSeatView();
   return {
     availableIntents: [],
     kind: "spectator",
-    match: createSeatView().match,
+    match: seatView.match,
     prompt: null,
     recentEvents: [],
-    seats: createSeatView().seats,
+    seats: seatView.seats,
     stack: [],
     zones: [],
   };

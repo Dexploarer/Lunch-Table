@@ -38,7 +38,11 @@ import {
   type StatusNotice,
   getErrorMessage,
 } from "./components/shared";
-import { convexWalletAuthTransport, requireConvexWalletAuthTransport, syncConvexAuth } from "./convex/client";
+import {
+  convexWalletAuthTransport,
+  requireConvexWalletAuthTransport,
+  syncConvexAuth,
+} from "./convex/client";
 
 const bootstrapChecklist = [
   "Bun workspace configured",
@@ -60,7 +64,6 @@ function buildStarterDeckEntries(catalog: CardCatalogEntry[]) {
     count: starterFormat.deckRules.maxCopies,
   }));
 }
-
 
 function getActiveLegalDeck(decks: DeckRecord[]) {
   return decks.find(
@@ -2356,12 +2359,21 @@ export function App() {
 
   const selectedMatch =
     matches.find((matchRecord) => matchRecord.id === selectedMatchId) ?? null;
-  const selectedHumanSeatCount = selectedMatch
-    ? selectedMatch.seats.filter((seat) => seat.actorType === "human").length
-    : 0;
-  const selectedAgentSeatCount = selectedMatch
-    ? selectedMatch.seats.filter((seat) => seat.actorType === "bot").length
-    : 0;
+  const selectedSeatCounts = selectedMatch
+    ? selectedMatch.seats.reduce(
+        (counts, seat) => {
+          if (seat.actorType === "bot") {
+            counts.agent += 1;
+          } else {
+            counts.human += 1;
+          }
+          return counts;
+        },
+        { agent: 0, human: 0 },
+      )
+    : { agent: 0, human: 0 };
+  const selectedHumanSeatCount = selectedSeatCounts.human;
+  const selectedAgentSeatCount = selectedSeatCounts.agent;
 
   return (
     <main className="app-shell">
