@@ -1,5 +1,4 @@
 import {
-  baselineBotPolicy,
   createDecisionFrame,
   createDecisionKey,
   getCatalogForFormat,
@@ -13,11 +12,17 @@ import type {
 import { ConvexClient, ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../../convex/_generated/api";
+import {
+  type DecisionPolicyConfig,
+  createDecisionPlanner,
+  loadDecisionPolicyConfig,
+} from "./policy";
 import { shouldRefreshSeatViewAfterSubmit } from "./refresh";
 
 interface RunnerConfig {
   botSlug: string;
   convexUrl: string;
+  policyConfig: DecisionPolicyConfig;
   runnerSecret: string;
 }
 
@@ -31,17 +36,33 @@ interface AssignmentWatcher {
 }
 
 function requireEnv(name: string) {
-  const value = process.env[name];
+  const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
 }
 
+function readOptionalEnv(name: string) {
+  return process.env[name]?.trim() || null;
+}
+
 function loadConfig(): RunnerConfig {
+  const policyConfig = loadDecisionPolicyConfig(process.env);
+  const botSlug = readOptionalEnv("BOT_SLUG") || "table-bot";
+  const convexUrl =
+    readOptionalEnv("CONVEX_URL") || readOptionalEnv("VITE_CONVEX_URL");
+
+  if (!convexUrl) {
+    throw new Error(
+      "Missing required environment variable: CONVEX_URL or VITE_CONVEX_URL",
+    );
+  }
+
   return {
-    botSlug: process.env.BOT_SLUG ?? "table-bot",
-    convexUrl: process.env.CONVEX_URL ?? requireEnv("VITE_CONVEX_URL"),
+    botSlug,
+    convexUrl,
+    policyConfig,
     runnerSecret: requireEnv("BOT_RUNNER_SECRET"),
   };
 }
@@ -51,10 +72,11 @@ class BotRunner {
     null;
   private readonly client: ConvexClient;
   private readonly httpClient: ConvexHttpClient;
-  private readonly policy = baselineBotPolicy;
+  private readonly planner: ReturnType<typeof createDecisionPlanner>;
   private readonly watchers = new Map<BotAssignmentId, AssignmentWatcher>();
 
   constructor(private readonly config: RunnerConfig) {
+    this.planner = createDecisionPlanner(config.policyConfig);
     this.client = new ConvexClient(config.convexUrl, {
       logger: false,
       verbose: false,
@@ -65,10 +87,18 @@ class BotRunner {
   }
 
   async start() {
-    const session = await this.httpClient.action(api.agents.issueBotSession, {
-      runnerSecret: this.config.runnerSecret,
-      slug: this.config.botSlug,
-    });
+    const session = await (async () => {
+      try {
+        return await this.httpClient.action(api.agents.issueBotSession, {
+          policyKey: this.config.policyConfig.key,
+          runnerSecret: this.config.runnerSecret,
+          slug: this.config.botSlug,
+        });
+      } catch (error) {
+        console.error(`[${APP_NAME}] failed to issue bot session`, error);
+        throw error;
+      }
+    })();
 
     this.client.setAuth(async () => session.token);
     this.client.subscribeToConnectionState((state) => {
@@ -91,7 +121,7 @@ class BotRunner {
     );
 
     console.log(
-      `[${APP_NAME}] bot runner ready for ${session.botIdentity.displayName} (${session.botIdentity.slug}) using policy ${this.policy.key}.`,
+      `[${APP_NAME}] bot runner ready for ${session.botIdentity.displayName} (${session.botIdentity.slug}) using policy ${this.planner.key}.`,
     );
   }
 
@@ -176,13 +206,30 @@ class BotRunner {
       return;
     }
 
-    const plan = this.policy.decide(frame);
-    if (!plan) {
-      return;
-    }
-
     watcher.inFlight = true;
     watcher.lastDecisionKey = decisionKey;
+
+    let plannerFailed = false;
+    const plan = await (async () => {
+      try {
+        return await this.planner.decide(frame);
+      } catch (error) {
+        plannerFailed = true;
+        console.error(
+          `[${APP_NAME}] failed to plan ${assignment.assignment.matchId} for ${assignment.assignment.seat}`,
+          error,
+        );
+        return null;
+      }
+    })();
+
+    if (!plan) {
+      if (plannerFailed) {
+        watcher.lastDecisionKey = null;
+      }
+      watcher.inFlight = false;
+      return;
+    }
 
     let shouldRefreshSeatView = false;
     let shouldExitAfterSubmit = false;

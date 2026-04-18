@@ -12,8 +12,8 @@ import type {
   SubmitIntentResult,
   WalletLibraryTransport,
 } from "../../convex/api";
-import { StatusBanner, type StatusNotice, getErrorMessage } from "../shared";
 import { useSeatView } from "../../hooks/useSeatView";
+import { StatusBanner, type StatusNotice, getErrorMessage } from "../shared";
 import { LazyBoardCanvas } from "./LazyBoardCanvas";
 import {
   type MatchRenderMode,
@@ -63,36 +63,67 @@ function buildPromptIntent(input: {
   view: Extract<MatchView, { kind: "seat" }>;
 }): SubmitIntent | null {
   const seat = assertMatchSeatId(input.view.viewerSeat);
+  const promptKind = input.view.prompt?.kind;
 
-  if (input.view.prompt?.kind !== "mulligan") {
-    return null;
+  switch (promptKind) {
+    case undefined:
+      return null;
+    case "mulligan":
+      if (input.choice.choiceId === "keep") {
+        return {
+          intentId: createIntentId("keepOpeningHand"),
+          kind: "keepOpeningHand",
+          matchId: input.view.match.id,
+          payload: {},
+          seat,
+          stateVersion: input.view.match.version,
+        };
+      }
+
+      if (input.choice.choiceId.startsWith("mulligan:")) {
+        return {
+          intentId: createIntentId("takeMulligan"),
+          kind: "takeMulligan",
+          matchId: input.view.match.id,
+          payload: {
+            targetHandSize: Number(input.choice.choiceId.split(":")[1] ?? ""),
+          },
+          seat,
+          stateVersion: input.view.match.version,
+        };
+      }
+
+      return null;
+    default:
+      console.warn(
+        `Unsupported prompt intent kind in MatchShell: ${promptKind}`,
+      );
+      return null;
   }
+}
 
-  if (input.choice.choiceId === "keep") {
-    return {
-      intentId: createIntentId("keepOpeningHand"),
-      kind: "keepOpeningHand",
-      matchId: input.view.match.id,
-      payload: {},
-      seat,
-      stateVersion: input.view.match.version,
-    };
-  }
+function formatActorType(actorType: MatchView["seats"][number]["actorType"]) {
+  return actorType === "bot" ? "Agent seat" : "Human seat";
+}
 
-  if (input.choice.choiceId.startsWith("mulligan:")) {
-    return {
-      intentId: createIntentId("takeMulligan"),
-      kind: "takeMulligan",
-      matchId: input.view.match.id,
-      payload: {
-        targetHandSize: Number(input.choice.choiceId.split(":")[1] ?? ""),
-      },
-      seat,
-      stateVersion: input.view.match.version,
-    };
-  }
+export function summarizeTableParity(view: MatchView) {
+  const agentSeats = view.seats.filter(
+    (seat) => seat.actorType === "bot",
+  ).length;
+  const humanSeats = view.seats.length - agentSeats;
 
-  return null;
+  return {
+    accessSummary:
+      view.kind === "seat"
+        ? `Controlling ${view.viewerSeat} through the same live intent rail every legal player seat uses.`
+        : "Watching the public projection only. Spectator mode cannot submit gameplay intents.",
+    agentSeats,
+    humanSeats,
+    paritySummary:
+      agentSeats === 0
+        ? "This table currently shows only human-controlled seats."
+        : "Human and agent seats share the same prompts, timers, and authoritative reducer.",
+  };
 }
 
 function MatchSeatStrip({
@@ -118,7 +149,12 @@ function MatchSeatStrip({
                 ? " · you"
                 : ""}
             </p>
-            <span className="match-seat-status">{seat.status}</span>
+            <div className="match-seat-badges">
+              <span className="match-seat-status">{seat.status}</span>
+              <span className="match-seat-actor">
+                {formatActorType(seat.actorType)}
+              </span>
+            </div>
           </div>
           <dl className="stats match-seat-stats">
             <div>
@@ -171,8 +207,13 @@ export function MatchShell({
     seatView,
     spectatorView,
   });
+  const tableParity = view ? summarizeTableParity(view) : null;
   const gameplaySeat =
     view?.kind === "seat" ? assertMatchSeatId(view.viewerSeat) : null;
+  const viewerSeatState =
+    view?.kind === "seat"
+      ? (view.seats.find((seat) => seat.seat === view.viewerSeat) ?? null)
+      : null;
 
   useEffect(() => {
     if (!seatView && spectatorView && preferredMode === "seat") {
@@ -211,6 +252,21 @@ export function MatchShell({
     } finally {
       setPendingIntent(null);
     }
+  }
+
+  function submitViewerSeatIntent(
+    factory: (seat: NonNullable<typeof gameplaySeat>) => SubmitIntent,
+  ) {
+    if (!shell || !gameplaySeat) {
+      setNotice({
+        body: "The live seat is unavailable for this action.",
+        title: "Seat unavailable",
+        tone: "warning",
+      });
+      return;
+    }
+
+    void submitIntent(factory(gameplaySeat));
   }
 
   function submitPlayCard(cardInstanceId: string) {
@@ -264,7 +320,8 @@ export function MatchShell({
           </div>
           <p className="support-copy">
             Create a practice match, finish a lobby ready check, or open a
-            queued match to mount the live seat and spectator shells here.
+            queued match to mount the live table here. Practice matches seat a
+            human and an agent under the same rules path.
           </p>
         </div>
       </section>
@@ -334,6 +391,30 @@ export function MatchShell({
           <>
             <MatchSeatStrip shell={shell} view={view} />
 
+            {tableParity ? (
+              <div className="match-parity-strip">
+                <section className="match-parity-card">
+                  <div className="match-zone-label-row">
+                    <p className="match-zone-label">Table parity</p>
+                    <span>
+                      {tableParity.humanSeats} human · {tableParity.agentSeats}{" "}
+                      agent
+                    </span>
+                  </div>
+                  <p className="support-copy">{tableParity.paritySummary}</p>
+                </section>
+                <section className="match-parity-card">
+                  <div className="match-zone-label-row">
+                    <p className="match-zone-label">
+                      {mode === "seat" ? "Your access" : "Spectator access"}
+                    </p>
+                    <span>{mode}</span>
+                  </div>
+                  <p className="support-copy">{tableParity.accessSummary}</p>
+                </section>
+              </div>
+            ) : null}
+
             <div className="match-layout">
               <div className="match-board-column">
                 <Suspense
@@ -375,6 +456,7 @@ export function MatchShell({
                             {isViewerSeat ? " · your seat" : ""}
                           </p>
                           <p className="library-card-meta">
+                            {formatActorType(seat.actorType)} ·{" "}
                             {seat.hasPriority
                               ? "Priority owner"
                               : shell.prioritySeat === seat.seat
@@ -500,67 +582,80 @@ export function MatchShell({
                     <span>{view.stack.length} stack objects</span>
                   </div>
                   {view.kind === "seat" ? (
-                    <div className="match-choice-list">
-                      <button
-                        className="action secondary-action"
-                        disabled={
-                          !view.availableIntents.includes("passPriority") ||
-                          pendingIntent !== null
-                        }
-                        onClick={() =>
-                          submitIntent({
-                            intentId: createIntentId("passPriority"),
-                            kind: "passPriority",
-                            matchId: shell.id,
-                            payload: {},
-                            seat: gameplaySeat ?? "seat-0",
-                            stateVersion: shell.version,
-                          })
-                        }
-                        type="button"
-                      >
-                        Pass priority
-                      </button>
-                      <button
-                        className="action secondary-action"
-                        disabled={pendingIntent !== null}
-                        onClick={() =>
-                          submitIntent({
-                            intentId: createIntentId("toggleAutoPass"),
-                            kind: "toggleAutoPass",
-                            matchId: shell.id,
-                            payload: {
-                              enabled: !view.seats.find(
-                                (seat) => seat.seat === view.viewerSeat,
-                              )?.autoPassEnabled,
-                            },
-                            seat: gameplaySeat ?? "seat-0",
-                            stateVersion: shell.version,
-                          })
-                        }
-                        type="button"
-                      >
-                        Toggle auto-pass
-                      </button>
-                      <button
-                        className="action secondary-action"
-                        disabled={pendingIntent !== null}
-                        onClick={() =>
-                          submitIntent({
-                            intentId: createIntentId("concede"),
-                            kind: "concede",
-                            matchId: shell.id,
-                            payload: {
-                              reason: "manual",
-                            },
-                            seat: gameplaySeat ?? "seat-0",
-                            stateVersion: shell.version,
-                          })
-                        }
-                        type="button"
-                      >
-                        Concede match
-                      </button>
+                    <div className="panel-stack">
+                      <p className="support-copy">
+                        This rail only exposes legal actions for the current
+                        seat. Human and agent players use the same authoritative
+                        intent surface.
+                      </p>
+                      <div className="match-choice-list">
+                        <button
+                          className="action secondary-action"
+                          disabled={
+                            !gameplaySeat ||
+                            !view.availableIntents.includes("passPriority") ||
+                            pendingIntent !== null
+                          }
+                          onClick={() =>
+                            submitViewerSeatIntent((seat) => ({
+                              intentId: createIntentId("passPriority"),
+                              kind: "passPriority",
+                              matchId: shell.id,
+                              payload: {},
+                              seat,
+                              stateVersion: shell.version,
+                            }))
+                          }
+                          type="button"
+                        >
+                          Pass priority
+                        </button>
+                        <button
+                          className="action secondary-action"
+                          disabled={
+                            !gameplaySeat ||
+                            !viewerSeatState ||
+                            pendingIntent !== null
+                          }
+                          onClick={() => {
+                            if (!viewerSeatState) {
+                              return;
+                            }
+                            submitViewerSeatIntent((seat) => ({
+                              intentId: createIntentId("toggleAutoPass"),
+                              kind: "toggleAutoPass",
+                              matchId: shell.id,
+                              payload: {
+                                enabled: !viewerSeatState.autoPassEnabled,
+                              },
+                              seat,
+                              stateVersion: shell.version,
+                            }));
+                          }}
+                          type="button"
+                        >
+                          Toggle auto-pass
+                        </button>
+                        <button
+                          className="action secondary-action"
+                          disabled={!gameplaySeat || pendingIntent !== null}
+                          onClick={() =>
+                            submitViewerSeatIntent((seat) => ({
+                              intentId: createIntentId("concede"),
+                              kind: "concede",
+                              matchId: shell.id,
+                              payload: {
+                                reason: "manual",
+                              },
+                              seat,
+                              stateVersion: shell.version,
+                            }))
+                          }
+                          type="button"
+                        >
+                          Concede match
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <p className="support-copy">
@@ -595,6 +690,10 @@ export function MatchShell({
                     <p className="match-zone-label">Timers</p>
                     <span>{shell.status}</span>
                   </div>
+                  <p className="support-copy">
+                    Deadlines and rope windows apply to every seat equally,
+                    whether the current player is human or agent-controlled.
+                  </p>
                   <dl className="stats match-zone-stats">
                     <div>
                       <dt>Active deadline</dt>

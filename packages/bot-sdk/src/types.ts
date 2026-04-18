@@ -55,6 +55,44 @@ export interface BotLegalAction {
   priority: number;
 }
 
+export interface BotExternalDecisionAction {
+  actionId: string;
+  intent: BotSupportedIntent;
+  kind: BotSupportedIntent["kind"];
+  label: string;
+  priority: number;
+}
+
+export interface BotExternalDecisionEnvelope {
+  formatId: string;
+  formatName: string;
+  legalActions: BotExternalDecisionAction[];
+  matchId: MatchId;
+  prompt: string;
+  receivedAt: number;
+  seat: BotSeatId;
+  stateVersion: number;
+  summary: {
+    activeSeat: MatchSeatView["match"]["activeSeat"];
+    deadlineAt: number | null;
+    phase: MatchSeatView["match"]["phase"];
+    recentEvents: string[];
+    stackLabels: string[];
+    turnNumber: MatchSeatView["match"]["turnNumber"];
+  };
+  view: MatchSeatView;
+}
+
+export type BotExternalDecisionResponse =
+  | {
+      actionId: null;
+    }
+  | {
+      actionId: string;
+      confidence?: number;
+      rationale?: string;
+    };
+
 export interface BotPlannedIntent {
   confidence: number;
   intent: BotSupportedIntent;

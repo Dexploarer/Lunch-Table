@@ -5,7 +5,6 @@ import type {
 } from "@lunchtable/shared-types";
 import { v } from "convex/values";
 
-import type { WalletAuthSession } from "@lunchtable/shared-types";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, internalMutation, mutation } from "./_generated/server";

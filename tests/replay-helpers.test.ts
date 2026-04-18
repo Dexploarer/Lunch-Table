@@ -172,7 +172,6 @@ describe("replay helpers", () => {
       createReplayFrame({
         event,
         frameIndex: 0,
-        recordedAt: bundle.shell.createdAt,
         view: bundle.spectatorView,
       }),
     ];
@@ -185,6 +184,6 @@ describe("replay helpers", () => {
   it("rejects malformed replay frame payloads", () => {
     expect(() =>
       deserializeReplayFrames(JSON.stringify([{ frameIndex: 0 }])),
-    ).toThrow("Invalid replay frames JSON payload");
+    ).toThrow("Invalid replay frames[0].eventKind");
   });
 });
