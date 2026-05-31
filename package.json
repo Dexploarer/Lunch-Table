@@ -33,9 +33,9 @@
     "benchmark:deterministic": "bun run scripts/run-deterministic-benchmarks.ts"
   },
   "dependencies": {
-    "@convex-dev/agent": "0.6.1",
+    "@convex-dev/agent": "0.6.2",
     "@noble/curves": "2.0.1",
-    "convex": "1.37.0",
+    "convex": "1.39.1",
     "jose": "6.2.2",
     "viem": "2.47.6"
   },
